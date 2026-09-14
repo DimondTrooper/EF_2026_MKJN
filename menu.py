@@ -1,8 +1,5 @@
 from tkinter import *
 from tkinter import messagebox
-HEIGHT = 600
-WIDTH = 800
-
 def mode_menu():
     #clear old widgets->feels like switching
     for widget in root.winfo_children():
@@ -46,8 +43,10 @@ def controls_screen(mode):
 #setup rootwindow
 root = Tk()
 root.title('Tank Game')
-root.geometry(f'{WIDTH}x{HEIGHT}')
-root.resizable(False, False)
+#claude code for fullscreen escape functions, otherwise needs altf4 to close
+root.attributes('-fullscreen', True)
+root.bind('<Escape>', lambda e: root.attributes('-fullscreen', False))
+#one needs to go to fullscreen, then press esc, and then pres the rect to go to fullscreen windowed
 root.option_add('*Font', 'Calibri 12')
 root.option_add('*Background', 'white')
 #start app on menufunct
