@@ -1,12 +1,10 @@
-import winsound
-
 from tkinter import Canvas
 from PIL import Image, ImageTk
 from build_tank_images import get_tank_images
+import winsound
+import time
 
 BACKGROUND_PATH = "Assets/Map_Hintergrund.png"
-SHOOT_SOUND_PATH = "Sounds/Shoot.wav"
-SHOOT_SOUND_DELAY_MS = 125  # winsound braucht bei dieser Datei ca. 0.125s, bis der Sound wirklich hoerbar startet
 
 SPEED = 1
 FPS = 60
@@ -14,6 +12,7 @@ DELAY = int(1000 / FPS)
 # ANGLE_STEPS muss der Reihenfolge im Kreis entsprechen (fuer next_step_towards)
 ROTATE_STEP_EVERY = 10
 BARREL_OFFSET = 50
+SHOOT_COOLDOWN = 3.5
  
 # ANGLE_STEPS muss der Reihenfolge im Kreis entsprechen (fuer next_step_towards)
 ANGLE_STEPS = [0, 45, 90, 135, 180, 225, 270, 315]
@@ -22,6 +21,7 @@ state = {
     "angle": 0,
     "target_angle": 0,
     "frame_counter": 0,
+    "last_shot_time": 0,
 }
  
 DIRECTION_TO_ANGLE = {
@@ -95,6 +95,7 @@ def run_game(root, mode):
         "target_angle": 0,
         "frame_counter": 0,
         "alive": True,
+        "last_shot_time": 0,
     }
     projectiles = []
     PROJECTILE_SPEED = 8 
@@ -108,22 +109,22 @@ def run_game(root, mode):
     def on_key_up(event):
         keys_pressed.discard(event.keysym.lower())
     def on_shoot(event):
+        now = time.time()
+        if now - state["last_shot_time"] < SHOOT_COOLDOWN:
+            return  # noch in Abklingzeit, Schuss ignorieren
+        state["last_shot_time"] = now
+
         x, y = canvas.coords(tank)
         dx, dy = ANGLE_TO_VECTOR[state["angle"]]
         start_x = x + dx * BARREL_OFFSET
         start_y = y + dy * BARREL_OFFSET
-
-        winsound.PlaySound(SHOOT_SOUND_PATH, winsound.SND_FILENAME | winsound.SND_ASYNC)
-
-        def spawn_bullet():
-            bullet = canvas.create_oval(
-                start_x - PROJECTILE_RADIUS, start_y - PROJECTILE_RADIUS,
-                start_x + PROJECTILE_RADIUS, start_y + PROJECTILE_RADIUS,
-                fill="black",
-            )
-            projectiles.append({"id": bullet, "dx": dx, "dy": dy})
-
-        root.after(SHOOT_SOUND_DELAY_MS, spawn_bullet)
+        bullet = canvas.create_oval(
+            start_x - PROJECTILE_RADIUS, start_y - PROJECTILE_RADIUS,
+            start_x + PROJECTILE_RADIUS, start_y + PROJECTILE_RADIUS,
+            fill="black",
+        )
+        projectiles.append({"id": bullet, "dx": dx, "dy": dy})
+        winsound.PlaySound("Sounds/shoot.wav", winsound.SND_FILENAME | winsound.SND_ASYNC)
  
     root.bind("<KeyPress>", on_key_down)
     root.bind("<KeyRelease>", on_key_up)
