@@ -6,7 +6,7 @@ from build_tank_images import get_tank_images
 
 BACKGROUND_PATH = "Assets/Map_Hintergrund.png"
 SHOOT_SOUND_PATH = "Sounds/Shoot.wav"
-SHOOT_SOUND_DELAY_MS = 825  # winsound braucht bei dieser Datei ca. 0.8s, bis der Sound wirklich hoerbar startet
+SHOOT_SOUND_DELAY_MS = 125  # winsound braucht bei dieser Datei ca. 0.125s, bis der Sound wirklich hoerbar startet
 
 SPEED = 1
 FPS = 60
