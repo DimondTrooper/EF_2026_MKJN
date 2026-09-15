@@ -12,16 +12,37 @@ def mode_menu():
     #title,desc
     label_title=Label(frame, text='TNK-XTREME', fg='dark blue', font=('Calibri', 28, 'bold'))
     label_title.place(relx=0.2, rely=0.15, relwidth=0.6, relheight=0.15)
-    label_desc=Label(frame, text='Choose your battle mode to play on one computer:', font=('Calibri', 14))
+    label_desc=Label(frame, text='Choose battle mode to play:', font=('Calibri', 14))
     label_desc.place(relx=0.1, rely=0.35, relwidth=0.8, relheight=0.1)
+
+    #-DECORATIVE SIDE TANKS-
+    global tank_left_img, tank_right_img
+    try:
+        import os
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        
+        green_path = os.path.join(script_dir, 'Assets', 'Tank_Green_Homescreen.png')
+        blue_path = os.path.join(script_dir, 'Assets', 'Tank_Blue_Homescreen.png')
+        
+        raw_img_green = PhotoImage(file=green_path)
+        raw_img_blue = PhotoImage(file=blue_path)
+        
+        tank_left_img = raw_img_green.subsample(2, 2)
+        tank_right_img = raw_img_blue.subsample(2, 2)
+        
+        Label(frame, image=tank_left_img).place(relx=0.15, rely=0.57, anchor='center')
+        Label(frame, image=tank_right_img).place(relx=0.85, rely=0.57, anchor='center')
+    except Exception as e:
+        print(f"Image load note: {e}")
+    #decor side tanks - imported from ai entirely!
  
     #button for mode1(string->controls screen)
     btn_1=Button(frame, text='1 VS 1 Mode', bg='lightgreen', command=lambda: controls_screen('1 vs 1'))
-    btn_1.place(relx=0.3, rely=0.5, relwidth=0.4, relheight=0.1)
+    btn_1.place(relx=0.4, rely=0.5, relwidth=0.2, relheight=0.1)
  
     #btn for mode2
     btn_2=Button(frame, text='1 VS 1 VS 1 Mode', bg='lightblue', command=lambda: controls_screen('1 vs 1 vs 1'))
-    btn_2.place(relx=0.3, rely=0.65, relwidth=0.4, relheight=0.1)
+    btn_2.place(relx=0.4, rely=0.65, relwidth=0.2, relheight=0.1)
  
 def controls_screen(mode):
     #d previous frame
@@ -60,18 +81,18 @@ def controls_screen(mode):
         "Turn Right                                                            D\n"
         "Turn Left                                                               A\n"
         "Shoot                                                                     E")
-    p2_text=(
-        "Move Forward                                                   F\n"
+    p3_text=(
+        "Move Forward                                                   Y\n"
         "Move Backward                                                H\n\n"
         "Turn Right                                                            J\n"
         "Turn Left                                                              G\n"
         "Shoot                                                                    U")
-    p3_text=(
-        "Move Forward                                             Up\n"
-        "Move Backward                                          Down\n\n"
-        "Turn Right                                                     Right\n"
-        "Turn Left                                                        Left\n"
-        "Shoot                                                              Left Ctrl")
+    p2_text=(
+        "Move Forward                                Arrow Up\n"
+        "Move Backward                             Arrow Down\n\n"
+        "Turn Right                                        Arrow Right\n"
+        "Turn Left                                           Arrow Left\n"
+        "Shoot                                                 Left Ctrl")
     #mode1->display 2 boxes; mode2->all bxs
     if mode=='1 vs 1':
         player_box(0.21, 'Controls Player 1', p1_text)
@@ -83,7 +104,7 @@ def controls_screen(mode):
  
     #play btn
     btn_play = Button(frame, text='Play', bg='orange', font=('Calibri', 14, 'bold'), command=lambda: game.run_game(root, mode))
-    btn_play.place(relx=0.35, rely=0.75, relwidth=0.3, relheight=0.08)
+    btn_play.place(relx=0.36, rely=0.75, relwidth=0.27, relheight=0.1)
  
 root = Tk()
 root.title('Tank Game')
