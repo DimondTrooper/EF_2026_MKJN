@@ -1,4 +1,4 @@
-from tkinter import*
+from tkinter import *
 from tkinter import messagebox
 
 def mode_menu():
@@ -11,7 +11,7 @@ def mode_menu():
     #title,desc
     label_title=Label(frame, text='TNK-XTREME', fg='dark blue', font=('Calibri', 28, 'bold'))
     label_title.place(relx=0.2, rely=0.15, relwidth=0.6, relheight=0.15)
-    label_desc=Label(frame, text='Choose your battle mode to play:', font=('Calibri', 14))
+    label_desc=Label(frame, text='Choose your battle mode to play on one computer:', font=('Calibri', 14))
     label_desc.place(relx=0.1, rely=0.35, relwidth=0.8, relheight=0.1)
     
     #button for mode1(string->controls screen)
@@ -36,12 +36,12 @@ def controls_screen(mode):
     label.place(relx=0.2, rely=0.05, relwidth=0.6, relheight=0.1)
     #go-back-to-menu btn
     btn_back=Button(frame, text='← Return', bg='lightgray', command=mode_menu)
-    btn_back.place(relx=0.01, rely=0.01, relwidth=0.1, relheight=0.1)
+    btn_back.place(relx=0.005, rely=0.01, relwidth=0.1, relheight=0.1)
 
     #helpfunct->create player boxes(controls explain)
     def player_box(x_pos, title_text, controls_text):
         box=Frame(frame, bd=2, relief=GROOVE)
-        box.place(relx=x_pos, rely=0.18, relwidth=0.28, relheight=0.65)
+        box.place(relx=x_pos, rely=0.18, relwidth=0.23, relheight=0.45)
         
         lbl_title=Label(box, text=title_text, font=('Calibri', 14, 'bold'))
         lbl_title.pack(pady=10)
@@ -51,36 +51,35 @@ def controls_screen(mode):
 
     #texts-based on prototyp design
     p1_text=(
-        "Move Forward    W\n"
-        "Move Backward   S\n\n"
-        "Turn Right      D\n"
-        "Turn Left       A\n\n"
-        "Shoot           E")
+        "Move Forward                                                   W\n"
+        "Move Backward                                                 S\n\n"
+        "Turn Right                                                            D\n"
+        "Turn Left                                                               A\n"
+        "Shoot                                                                     E")
     p2_text=(
-        "Move Forward    F\n"
-        "Move Backward   H\n\n"
-        "Turn Right      J\n"
-        "Turn Left       G\n\n"
-        "Shoot           U")
+        "Move Forward                                                   F\n"
+        "Move Backward                                                H\n\n"
+        "Turn Right                                                            J\n"
+        "Turn Left                                                              G\n"
+        "Shoot                                                                    U")
     p3_text=(
-        "Move Forward    Up\n"
-        "Move Backward   Down\n\n"
-        "Turn Right      Right\n"
-        "Turn Left       Left\n\n"
-        "Shoot           Left Ctrl"
-    )
+        "Move Forward                                             Up\n"
+        "Move Backward                                          Down\n\n"
+        "Turn Right                                                     Right\n"
+        "Turn Left                                                        Left\n"
+        "Shoot                                                              Left Ctrl")
     #mode1->display 2 boxes; mode2->all bxs
     if mode=='1 vs 1':
-        player_box(0.18, 'Controls Player 1', p1_text)
+        player_box(0.21, 'Controls Player 1', p1_text)
         player_box(0.54, 'Controls Player 2', p2_text)
     else:
-        player_box(0.04, 'Controls Player 1', p1_text)
-        player_box(0.36, 'Controls Player 2', p2_text)
-        player_box(0.68, 'Controls Player 3', p3_text)
+        player_box(0.06, 'Controls Player 1', p1_text)
+        player_box(0.38, 'Controls Player 2', p2_text)
+        player_box(0.7, 'Controls Player 3', p3_text)
 
-    # Play button at the bottom
+    #play btn
     btn_play = Button(frame, text='Play', bg='lightgreen', font=('Calibri', 14, 'bold'), command=lambda: print("Start game!"))
-    btn_play.place(relx=0.35, rely=0.87, relwidth=0.3, relheight=0.08)
+    btn_play.place(relx=0.35, rely=0.75, relwidth=0.3, relheight=0.08)
 
 root = Tk()
 root.title('Tank Game')
