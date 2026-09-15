@@ -1,72 +1,87 @@
-import tkinter as tk
+from tkinter import Canvas
+from PIL import Image, ImageTk
+from build_tank_images import get_tank_images
  
-WIDTH = 800
-HEIGHT = 600
-TANK_SIZE = 40
-SPEED = 5          # Pixel pro Frame
+SPEED = 3
 FPS = 60
 DELAY = int(1000 / FPS)
+
+tank_images = get_tank_images()
  
-root = tk.Tk()
-root.title("Panzer Bewegung - Demo")
+def run_game(root, mode):
+    # altes Frame (Controls-Screen) weg
+    for widget in root.winfo_children():
+        widget.destroy()
  
-canvas = tk.Canvas(root, width=WIDTH, height=HEIGHT, bg="darkgreen")
-canvas.pack()
+    WIDTH = root.winfo_width()
+    HEIGHT = root.winfo_height()
  
-# Panzer als einfaches blaues Rechteck (Platzhalter, bis echte Assets eingebaut sind)
-tank = canvas.create_rectangle(
-    WIDTH // 2 - TANK_SIZE // 2,
-    HEIGHT // 2 - TANK_SIZE // 2,
-    WIDTH // 2 + TANK_SIZE // 2,
-    HEIGHT // 2 + TANK_SIZE // 2,
-    fill="blue",
-)
+    canvas = Canvas(root, width=WIDTH, height=HEIGHT, bg="darkgreen")
+    canvas.pack()
  
-# Menge aller aktuell gedrueckten Tasten
-keys_pressed = set()
+    original_pil_img = Image.open("Assets/Tank_Red_Forward.png")
+    original_pil_img.thumbnail((50, 50))
+    original_pil_img = Image.open("Assets/Tank_Red_Forward.png")
+    original_pil_img.thumbnail((50, 50))
  
+    rotated_cache = {}
  
-def on_key_down(event):
-    keys_pressed.add(event.keysym.lower())
+    def get_rotated_image(angle):
+        if angle not in rotated_cache:
+            rotated = original_pil_img.rotate(angle, expand=True)
+            rotated_cache[angle] = ImageTk.PhotoImage(rotated)
+        return rotated_cache[angle]
  
+    state = {
+        "angle": 0,
+        "tank_img": get_rotated_image(0),
+    }
  
-def on_key_up(event):
-    keys_pressed.discard(event.keysym.lower())
+    tank = canvas.create_image(WIDTH // 2, HEIGHT // 2, image=state["tank_img"])
+    tank_width = state["tank_img"].width()
+    tank_height = state["tank_img"].height()
  
+    keys_pressed = set()
  
-root.bind("<KeyPress>", on_key_down)
-root.bind("<KeyRelease>", on_key_up)
+    def on_key_down(event):
+        keys_pressed.add(event.keysym.lower())
  
+    def on_key_up(event):
+        keys_pressed.discard(event.keysym.lower())
  
-def clamp(value, min_value, max_value):
-    return max(min_value, min(value, max_value))
+    root.bind("<KeyPress>", on_key_down)
+    root.bind("<KeyRelease>", on_key_up)
  
+    def clamp(value, min_value, max_value):
+        return max(min_value, min(value, max_value))
  
-def game_loop():
-    dx = 0
-    dy = 0
-    if "w" in keys_pressed:
-        dy -= SPEED
-    if "s" in keys_pressed:
-        dy += SPEED
-    if "a" in keys_pressed:
-        dx -= SPEED
-    if "d" in keys_pressed:
-        dx += SPEED
+    def game_loop():
+        nonlocal tank_width, tank_height
  
-    if dx != 0 or dy != 0:
-        x1, y1, x2, y2 = canvas.coords(tank)
+        dx = dy = 0
+        new_angle = state["angle"]
+        if "w" in keys_pressed:
+            dy -= SPEED
+            new_angle = 0
+        if "s" in keys_pressed:
+            dy += SPEED
+            new_angle = 180
+        if "a" in keys_pressed:
+            dx -= SPEED
+            new_angle = 90
+        if "d" in keys_pressed:
+            dx += SPEED
+            new_angle = 270
  
-        # Bildschirmgrenzen: Panzer darf nicht rausfahren
-        new_x1 = clamp(x1 + dx, 0, WIDTH - TANK_SIZE)
-        new_y1 = clamp(y1 + dy, 0, HEIGHT - TANK_SIZE)
+        if dx != 0 or dy != 0:
+            x, y = canvas.coords(tank)
+            half_w = tank_width // 2
+            half_h = tank_height // 2
+            new_x = clamp(x + dx, half_w, WIDTH - half_w)
+            new_y = clamp(y + dy, half_h, HEIGHT - half_h)
+            canvas.move(tank, new_x - x, new_y - y)
  
-        actual_dx = new_x1 - x1
-        actual_dy = new_y1 - y1
-        canvas.move(tank, actual_dx, actual_dy)
+        root.after(DELAY, game_loop)
  
-    root.after(DELAY, game_loop)
+    game_loop()
  
- 
-game_loop()
-root.mainloop()
