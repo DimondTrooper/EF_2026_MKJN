@@ -1,16 +1,25 @@
+import os
+os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")  # keine Begruessungs-Ausgabe im Terminal
+
 import time
-import winsound
+import pygame
 from tkinter import Canvas
 from PIL import Image, ImageTk
 from build_tank_images import get_tank_images
 
 BACKGROUND_PATH = "Assets/Map_real.png"
 SHOOT_SOUND_PATH = "Sounds/Shoot.wav"
+MOVE_SOUND_PATH = "Sounds/Tank_moving.wav"
+MOVE_SOUND_FADEOUT_MS = 300  # sanftes Ausklingen statt hartem Stopp
+
+pygame.mixer.init()
+SHOOT_SOUND = pygame.mixer.Sound(SHOOT_SOUND_PATH)
+MOVE_SOUND = pygame.mixer.Sound(MOVE_SOUND_PATH)
 
 SPEED = 1.5
 FPS = 60
 DELAY = int(1000 / FPS)
- 
+
 # minimale Zeit (Sekunden) zwischen zwei Drehschritten -- unabhaengig davon,
 # wie oft/schnell man Tasten drueckt, kann sich der Panzer nicht schneller
 # drehen als das hier erlaubt
@@ -20,7 +29,7 @@ ROTATE_COOLDOWN = 0.12
 # Drehung angenommen wird -- zusaetzlich zur Regel, dass die aktuelle Drehung
 # erst fertig sein muss
 ROTATE_RESTART_COOLDOWN = 0.15
- 
+
 SHOOT_COOLDOWN = 4     # Sekunden zwischen Schuessen
 PROJECTILE_SPEED = 8
 PROJECTILE_RADIUS = 4
@@ -91,6 +100,7 @@ def create_player(root, canvas, name, keys, tank_images, start_x, start_y):
         "tank": tank,
         "name": name,
         "alive": True,
+        "moving": False,
         "tank_images": tank_images,
         "tank_width": tank_images[0].width(),
         "tank_height": tank_images[0].height(),
@@ -124,8 +134,8 @@ def create_player(root, canvas, name, keys, tank_images, start_x, start_y):
             fill="black",
         )
         player["projectiles"].append({"id": bullet, "dx": dx, "dy": dy})
-        winsound.PlaySound(SHOOT_SOUND_PATH, winsound.SND_FILENAME | winsound.SND_ASYNC)
- 
+        SHOOT_SOUND.play()
+
     root.bind(f"<KeyPress-{keys['shoot']}>", on_shoot)
  
     return player
@@ -133,6 +143,7 @@ def create_player(root, canvas, name, keys, tank_images, start_x, start_y):
  
 def update_player(canvas, player, keys_pressed, width, height):
     if not player["alive"]:
+        player["moving"] = False
         return  # Spieler tot -> keine Updates mehr
     """Ein Frame Logik fuer GENAU EINEN Spieler: Drehen, Bewegen, Projektile."""
     keys = player["keys"]
@@ -177,8 +188,10 @@ def update_player(canvas, player, keys_pressed, width, height):
             player["tank_height"] = player["tank_images"][state["angle"]].height()
             if state["angle"] == state["target_angle"]:
                 state["rotation_ready_time"] = now + ROTATE_RESTART_COOLDOWN
- 
-    if dx != 0 or dy != 0:
+
+    player["moving"] = dx != 0 or dy != 0
+
+    if player["moving"]:
         x, y = canvas.coords(player["tank"])
         half_w = player["tank_width"] // 2
         half_h = player["tank_height"] // 2
@@ -250,15 +263,28 @@ def run_game(root, mode):
  
     root.bind("<KeyPress>", on_key_down)
     root.bind("<KeyRelease>", on_key_up)
- 
+
+    move_channel = None
+
     def game_loop():
+        nonlocal move_channel
+
         for player in players:
             update_player(canvas, player, keys_pressed, WIDTH, HEIGHT)
+
+        any_moving = any(p["moving"] for p in players)
+        if any_moving and move_channel is None:
+            move_channel = MOVE_SOUND.play(loops=-1)
+        elif not any_moving and move_channel is not None:
+            move_channel.fadeout(MOVE_SOUND_FADEOUT_MS)
+            move_channel = None
 
         check_hits(canvas, players)
 
         alive_players = [p for p in players if p["alive"]]
         if len(alive_players) <= 1:
+            if move_channel is not None:
+                move_channel.fadeout(MOVE_SOUND_FADEOUT_MS)
             winner_text = f"{alive_players[0]['name']} gewinnt!" if alive_players else "Unentschieden!"
             canvas.create_text(
                 WIDTH // 2, HEIGHT // 2,
