@@ -1,12 +1,45 @@
 from tkinter import Canvas
-from PIL import Image, ImageTk
 from build_tank_images import get_tank_images
  
 SPEED = 3
 FPS = 60
 DELAY = int(1000 / FPS)
-
-tank_images = get_tank_images()
+ 
+# ANGLE_STEPS muss der Reihenfolge im Kreis entsprechen (fuer next_step_towards)
+ANGLE_STEPS = [0, 45, 90, 135, 180, 225, 270, 315]
+ 
+DIRECTION_TO_ANGLE = {
+    (True, False, False, False): 0,    # nur oben
+    (True, False, False, True): 315,   # oben + rechts
+    (False, False, False, True): 270,  # nur rechts
+    (False, True, False, True): 225,   # unten + rechts
+    (False, True, False, False): 180,  # nur unten
+    (False, True, True, False): 135,   # unten + links
+    (False, False, True, False): 90,   # nur links
+    (True, False, True, False): 45,    # oben + links
+}
+ 
+ 
+# -- Auf Modul-Ebene, damit unittest sie direkt importieren/testen kann,
+#    ohne ein ganzes Tk-Fenster + Canvas + Game-Loop aufzuziehen.
+ 
+def clamp(value, min_value, max_value):
+    return max(min_value, min(value, max_value))
+ 
+ 
+def next_step_towards(current, target):
+    """Naechster Winkel aus ANGLE_STEPS auf dem kuerzesten Weg zu target."""
+    if current == target:
+        return current
+    i_current = ANGLE_STEPS.index(current)
+    i_target = ANGLE_STEPS.index(target)
+    n = len(ANGLE_STEPS)
+    forward_dist = (i_target - i_current) % n
+    backward_dist = (i_current - i_target) % n
+    if forward_dist <= backward_dist:
+        return ANGLE_STEPS[(i_current + 1) % n]
+    return ANGLE_STEPS[(i_current - 1) % n]
+ 
  
 def run_game(root, mode):
     # altes Frame (Controls-Screen) weg
@@ -19,27 +52,16 @@ def run_game(root, mode):
     canvas = Canvas(root, width=WIDTH, height=HEIGHT, bg="darkgreen")
     canvas.pack()
  
-    original_pil_img = Image.open("Assets/Tank_Red_Forward.png")
-    original_pil_img.thumbnail((50, 50))
-    original_pil_img = Image.open("Assets/Tank_Red_Forward.png")
-    original_pil_img.thumbnail((50, 50))
+    tank_images = get_tank_images()
  
-    rotated_cache = {}
- 
-    def get_rotated_image(angle):
-        if angle not in rotated_cache:
-            rotated = original_pil_img.rotate(angle, expand=True)
-            rotated_cache[angle] = ImageTk.PhotoImage(rotated)
-        return rotated_cache[angle]
+    tank = canvas.create_image(WIDTH // 2, HEIGHT // 2, image=tank_images[0])
+    tank_width = tank_images[0].width()
+    tank_height = tank_images[0].height()
  
     state = {
         "angle": 0,
-        "tank_img": get_rotated_image(0),
+        "target_angle": 0,
     }
- 
-    tank = canvas.create_image(WIDTH // 2, HEIGHT // 2, image=state["tank_img"])
-    tank_width = state["tank_img"].width()
-    tank_height = state["tank_img"].height()
  
     keys_pressed = set()
  
@@ -52,26 +74,34 @@ def run_game(root, mode):
     root.bind("<KeyPress>", on_key_down)
     root.bind("<KeyRelease>", on_key_up)
  
-    def clamp(value, min_value, max_value):
-        return max(min_value, min(value, max_value))
- 
     def game_loop():
         nonlocal tank_width, tank_height
+
+        up = "w" in keys_pressed
+        down = "s" in keys_pressed
+        left = "a" in keys_pressed
+        right = "d" in keys_pressed
  
+     
         dx = dy = 0
-        new_angle = state["angle"]
-        if "w" in keys_pressed:
+        if up:
             dy -= SPEED
-            new_angle = 0
-        if "s" in keys_pressed:
+        if down:
             dy += SPEED
-            new_angle = 180
-        if "a" in keys_pressed:
+        if left:
             dx -= SPEED
-            new_angle = 90
-        if "d" in keys_pressed:
+        if right:
             dx += SPEED
-            new_angle = 270
+ 
+        key = (up, down, left, right)
+        if key in DIRECTION_TO_ANGLE:
+            state["target_angle"] = DIRECTION_TO_ANGLE[key]
+ 
+        if state["angle"] != state["target_angle"]:
+            state["angle"] = next_step_towards(state["angle"], state["target_angle"])
+            canvas.itemconfig(tank, image=tank_images[state["angle"]])
+            tank_width = tank_images[state["angle"]].width()
+            tank_height = tank_images[state["angle"]].height()
  
         if dx != 0 or dy != 0:
             x, y = canvas.coords(tank)
@@ -84,4 +114,3 @@ def run_game(root, mode):
         root.after(DELAY, game_loop)
  
     game_loop()
- 
