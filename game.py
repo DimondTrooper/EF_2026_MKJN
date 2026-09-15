@@ -1,16 +1,25 @@
 import time
+import winsound
 from tkinter import Canvas
 from PIL import Image, ImageTk
 from build_tank_images import get_tank_images
 
 BACKGROUND_PATH = "Assets/Map_real.png"
+SHOOT_SOUND_PATH = "Sounds/Shoot.wav"
 
 SPEED = 1.5
 FPS = 60
 DELAY = int(1000 / FPS)
  
-# alle wie viele Frames ein ANGLE_STEP weitergedreht wird
-ROTATE_STEP_EVERY = 8
+# minimale Zeit (Sekunden) zwischen zwei Drehschritten -- unabhaengig davon,
+# wie oft/schnell man Tasten drueckt, kann sich der Panzer nicht schneller
+# drehen als das hier erlaubt
+ROTATE_COOLDOWN = 0.12
+
+# kurze Pause (Sekunden) NACH einer abgeschlossenen Drehung, bevor eine neue
+# Drehung angenommen wird -- zusaetzlich zur Regel, dass die aktuelle Drehung
+# erst fertig sein muss
+ROTATE_RESTART_COOLDOWN = 0.15
  
 SHOOT_COOLDOWN = 4     # Sekunden zwischen Schuessen
 PROJECTILE_SPEED = 8
@@ -89,7 +98,8 @@ def create_player(root, canvas, name, keys, tank_images, start_x, start_y):
         "state": {
             "angle": 0,
             "target_angle": 0,
-            "frame_counter": 0,
+            "last_rotate_time": 0,
+            "rotation_ready_time": 0,
             "last_shot_time": 0,
         },
         "projectiles": [],
@@ -114,6 +124,7 @@ def create_player(root, canvas, name, keys, tank_images, start_x, start_y):
             fill="black",
         )
         player["projectiles"].append({"id": bullet, "dx": dx, "dy": dy})
+        winsound.PlaySound(SHOOT_SOUND_PATH, winsound.SND_FILENAME | winsound.SND_ASYNC)
  
     root.bind(f"<KeyPress-{keys['shoot']}>", on_shoot)
  
@@ -145,20 +156,27 @@ def update_player(canvas, player, keys_pressed, width, height):
         dx += SPEED
  
     key = (up, down, left, right)
-    # neues Ziel nur uebernehmen, wenn die vorherige Drehung fertig ist --
-    # sonst kann man durch schnelles Tastenwechseln Drehungen aneinanderreihen
-    # und den Panzer beliebig lange weiterdrehen lassen
-    if key in DIRECTION_TO_ANGLE and state["angle"] == state["target_angle"]:
+    now = time.time()
+    # neues Ziel nur uebernehmen, wenn die vorherige Drehung fertig ist UND
+    # der kurze Cooldown danach abgelaufen ist -- sonst kann man durch
+    # schnelles Tastenwechseln Drehungen aneinanderreihen und den Panzer
+    # beliebig lange weiterdrehen lassen
+    if (
+        key in DIRECTION_TO_ANGLE
+        and state["angle"] == state["target_angle"]
+        and now >= state["rotation_ready_time"]
+    ):
         state["target_angle"] = DIRECTION_TO_ANGLE[key]
- 
+
     if state["angle"] != state["target_angle"]:
-        state["frame_counter"] += 1
-        if state["frame_counter"] >= ROTATE_STEP_EVERY:
-            state["frame_counter"] = 0
+        if now - state["last_rotate_time"] >= ROTATE_COOLDOWN:
+            state["last_rotate_time"] = now
             state["angle"] = next_step_towards(state["angle"], state["target_angle"])
             canvas.itemconfig(player["tank"], image=player["tank_images"][state["angle"]])
             player["tank_width"] = player["tank_images"][state["angle"]].width()
             player["tank_height"] = player["tank_images"][state["angle"]].height()
+            if state["angle"] == state["target_angle"]:
+                state["rotation_ready_time"] = now + ROTATE_RESTART_COOLDOWN
  
     if dx != 0 or dy != 0:
         x, y = canvas.coords(player["tank"])
