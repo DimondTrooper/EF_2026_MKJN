@@ -1,23 +1,21 @@
+import time
 from tkinter import Canvas
-from PIL import Image, ImageTk
 from build_tank_images import get_tank_images
-
-BACKGROUND_PATH = "Assets/Map_Hintergrund.png"
-
-SPEED = 1
+ 
+SPEED = 1.5
 FPS = 60
 DELAY = int(1000 / FPS)
-# ANGLE_STEPS muss der Reihenfolge im Kreis entsprechen (fuer next_step_towards)
-ROTATE_STEP_EVERY = 10
+ 
+# alle wie viele Frames ein ANGLE_STEP weitergedreht wird
+ROTATE_STEP_EVERY = 8
+ 
+SHOOT_COOLDOWN = 4     # Sekunden zwischen Schuessen
+PROJECTILE_SPEED = 8
+PROJECTILE_RADIUS = 4
+BARREL_OFFSET = 20     # Kugel startet so viele Pixel vor dem Panzer-Zentrum
  
 # ANGLE_STEPS muss der Reihenfolge im Kreis entsprechen (fuer next_step_towards)
 ANGLE_STEPS = [0, 45, 90, 135, 180, 225, 270, 315]
-
-state = {
-    "angle": 0,
-    "target_angle": 0,
-    "frame_counter": 0,
-}
  
 DIRECTION_TO_ANGLE = {
     (True, False, False, False): 0,    # nur oben
@@ -29,10 +27,26 @@ DIRECTION_TO_ANGLE = {
     (False, False, True, False): 90,   # nur links
     (True, False, True, False): 45,    # oben + links
 }
+ANGLE_TO_VECTOR = {
+    0:   (0, -1),   # oben
+    45:  (-1, -1),  # oben-links
+    90:  (-1, 0),   # links
+    135: (-1, 1),   # unten-links
+    180: (0, 1),    # unten
+    225: (1, 1),    # unten-rechts
+    270: (1, 0),    # rechts
+    315: (1, -1),   # oben-rechts
+}
+ 
+# Tastenbelegung pro Spieler -- muss zu controls_screen() in menu.py passen
+PLAYER_KEYS = {
+    1: {"up": "w", "down": "s", "left": "a", "right": "d", "shoot": "e"},
+    2: {"up": "f", "down": "h", "left": "g", "right": "j", "shoot": "u"},
+    3: {"up": "up", "down": "down", "left": "left", "right": "right", "shoot": "Control_L"},
+}
  
  
-# -- Auf Modul-Ebene, damit unittest sie direkt importieren/testen kann,
-#    ohne ein ganzes Tk-Fenster + Canvas + Game-Loop aufzuziehen.
+# -- Auf Modul-Ebene, damit unittest sie direkt importieren/testen kann.
  
 def clamp(value, min_value, max_value):
     return max(min_value, min(value, max_value))
@@ -50,8 +64,134 @@ def next_step_towards(current, target):
     if forward_dist <= backward_dist:
         return ANGLE_STEPS[(i_current + 1) % n]
     return ANGLE_STEPS[(i_current - 1) % n]
+
+def rects_overlap(a, b):
+    """a, b je (x1, y1, x2, y2). True, wenn sich die beiden Rechtecke ueberschneiden."""
+    ax1, ay1, ax2, ay2 = a
+    bx1, by1, bx2, by2 = b
+    return not (ax2 < bx1 or ax1 > bx2 or ay2 < by1 or ay1 > by2)
+  
+def create_player(root, canvas, name, keys, tank_images, start_x, start_y):
+
+    tank = canvas.create_image(start_x, start_y, image=tank_images[0])
+ 
+    player = {
+        "tank": tank,
+        "name": name,
+        "alive": True,
+        "tank_images": tank_images,
+        "tank_width": tank_images[0].width(),
+        "tank_height": tank_images[0].height(),
+        "keys": keys,
+        "state": {
+            "angle": 0,
+            "target_angle": 0,
+            "frame_counter": 0,
+            "last_shot_time": 0,
+        },
+        "projectiles": [],
+    }
+ 
+    def on_shoot(event):
+        if not player["alive"]:
+            return # Spieler tot -> keine Schuesse mehr
+        state = player["state"]
+        now = time.time()
+        if now - state["last_shot_time"] < SHOOT_COOLDOWN:
+            return  # noch in Abklingzeit
+        state["last_shot_time"] = now
+ 
+        x, y = canvas.coords(tank)
+        dx, dy = ANGLE_TO_VECTOR[state["angle"]]
+        start_bx = x + dx * BARREL_OFFSET
+        start_by = y + dy * BARREL_OFFSET
+        bullet = canvas.create_oval(
+            start_bx - PROJECTILE_RADIUS, start_by - PROJECTILE_RADIUS,
+            start_bx + PROJECTILE_RADIUS, start_by + PROJECTILE_RADIUS,
+            fill="black",
+        )
+        player["projectiles"].append({"id": bullet, "dx": dx, "dy": dy})
+ 
+    root.bind(f"<KeyPress-{keys['shoot']}>", on_shoot)
+ 
+    return player
  
  
+def update_player(canvas, player, keys_pressed, width, height):
+    if not player["alive"]:
+        return  # Spieler tot -> keine Updates mehr
+    """Ein Frame Logik fuer GENAU EINEN Spieler: Drehen, Bewegen, Projektile."""
+    keys = player["keys"]
+    state = player["state"]
+ 
+    # 1. Tasten dieses Spielers auslesen
+    up = keys["up"] in keys_pressed
+    down = keys["down"] in keys_pressed
+    left = keys["left"] in keys_pressed
+    right = keys["right"] in keys_pressed
+ 
+    # 2. Bewegung berechnen
+    dx = dy = 0
+    if up:
+        dy -= SPEED
+    if down:
+        dy += SPEED
+    if left:
+        dx -= SPEED
+    if right:
+        dx += SPEED
+ 
+    key = (up, down, left, right)
+    # neues Ziel nur uebernehmen, wenn die vorherige Drehung fertig ist --
+    # sonst kann man durch schnelles Tastenwechseln Drehungen aneinanderreihen
+    # und den Panzer beliebig lange weiterdrehen lassen
+    if key in DIRECTION_TO_ANGLE and state["angle"] == state["target_angle"]:
+        state["target_angle"] = DIRECTION_TO_ANGLE[key]
+ 
+    if state["angle"] != state["target_angle"]:
+        state["frame_counter"] += 1
+        if state["frame_counter"] >= ROTATE_STEP_EVERY:
+            state["frame_counter"] = 0
+            state["angle"] = next_step_towards(state["angle"], state["target_angle"])
+            canvas.itemconfig(player["tank"], image=player["tank_images"][state["angle"]])
+            player["tank_width"] = player["tank_images"][state["angle"]].width()
+            player["tank_height"] = player["tank_images"][state["angle"]].height()
+ 
+    if dx != 0 or dy != 0:
+        x, y = canvas.coords(player["tank"])
+        half_w = player["tank_width"] // 2
+        half_h = player["tank_height"] // 2
+        new_x = clamp(x + dx, half_w, width - half_w)
+        new_y = clamp(y + dy, half_h, height - half_h)
+        canvas.move(player["tank"], new_x - x, new_y - y)
+ 
+    for p in player["projectiles"][:]:
+        canvas.move(p["id"], p["dx"] * PROJECTILE_SPEED, p["dy"] * PROJECTILE_SPEED)
+        x1, y1, x2, y2 = canvas.coords(p["id"])
+        if x2 < 0 or x1 > width or y2 < 0 or y1 > height:
+            canvas.delete(p["id"])
+            player["projectiles"].remove(p)
+
+
+def check_hits(canvas, players):
+    """Prueft fuer alle Spieler, ob eines ihrer Projektile einen anderen (lebenden) Panzer trifft."""
+    for shooter in players:
+        for p in shooter["projectiles"][:]:
+            bullet_box = canvas.coords(p["id"])
+
+            for target in players:
+                if target is shooter or not target["alive"]:
+                    continue
+
+                tank_box = canvas.bbox(target["tank"])
+                if tank_box and rects_overlap(bullet_box, tank_box):
+                    target["alive"] = False
+                    canvas.delete(target["tank"])
+                    canvas.delete(p["id"])
+                    shooter["projectiles"].remove(p)
+                    break
+
+
 def run_game(root, mode):
     # altes Frame (Controls-Screen) weg
     for widget in root.winfo_children():
@@ -63,22 +203,16 @@ def run_game(root, mode):
     canvas = Canvas(root, width=WIDTH, height=HEIGHT, bg="darkgreen")
     canvas.pack()
 
-    background_image = Image.open(BACKGROUND_PATH).resize((WIDTH, HEIGHT))
-    background_photo = ImageTk.PhotoImage(background_image)
-    canvas.background_photo = background_photo  # Referenz halten, sonst Garbage Collection
-    canvas.create_image(0, 0, anchor="nw", image=background_photo)
-
     tank_images = get_tank_images()
-
-    tank = canvas.create_image(WIDTH // 2, HEIGHT // 2, image=tank_images[0])
-    tank_width = tank_images[0].width()
-    tank_height = tank_images[0].height()
  
-    state = {
-        "angle": 0,
-        "target_angle": 0,
-        "frame_counter": 0,
-    }
+    players = [
+        create_player(root, canvas,"Spieler 1", PLAYER_KEYS[1], tank_images, WIDTH // 3, HEIGHT // 2),
+        create_player(root, canvas, "Spieler 2", PLAYER_KEYS[2], tank_images, WIDTH * 2 // 3, HEIGHT // 2),
+    ]
+    if mode == "1 vs 1 vs 1":
+        players.append(
+            create_player(root, canvas, "Spieler 3", PLAYER_KEYS[3], tank_images, WIDTH // 2, HEIGHT // 4)
+        )
  
     keys_pressed = set()
  
@@ -92,45 +226,21 @@ def run_game(root, mode):
     root.bind("<KeyRelease>", on_key_up)
  
     def game_loop():
-        nonlocal tank_width, tank_height
+        for player in players:
+            update_player(canvas, player, keys_pressed, WIDTH, HEIGHT)
 
-        up = "w" in keys_pressed
-        down = "s" in keys_pressed
-        left = "a" in keys_pressed
-        right = "d" in keys_pressed
- 
-     
-        dx = dy = 0
-        if up:
-            dy -= SPEED
-        if down:
-            dy += SPEED
-        if left:
-            dx -= SPEED
-        if right:
-            dx += SPEED
- 
-        key = (up, down, left, right)
-        if key in DIRECTION_TO_ANGLE:
-            state["target_angle"] = DIRECTION_TO_ANGLE[key]
+        check_hits(canvas, players)
 
-        if state["angle"] != state["target_angle"]:
-                state["frame_counter"] += 1
-                if state["frame_counter"] >= ROTATE_STEP_EVERY:
-                    state["frame_counter"] = 0
-                    state["angle"] = next_step_towards(state["angle"], state["target_angle"])
-                    canvas.itemconfig(tank, image=tank_images[state["angle"]])
-                    tank_width = tank_images[state["angle"]].width()
-                    tank_height = tank_images[state["angle"]].height()
- 
-        if dx != 0 or dy != 0:
-            x, y = canvas.coords(tank)
-            half_w = tank_width // 2
-            half_h = tank_height // 2
-            new_x = clamp(x + dx, half_w, WIDTH - half_w)
-            new_y = clamp(y + dy, half_h, HEIGHT - half_h)
-            canvas.move(tank, new_x - x, new_y - y)
- 
+        alive_players = [p for p in players if p["alive"]]
+        if len(alive_players) <= 1:
+            winner_text = f"{alive_players[0]['name']} gewinnt!" if alive_players else "Unentschieden!"
+            canvas.create_text(
+                WIDTH // 2, HEIGHT // 2,
+                text=winner_text, fill="white", font=("Calibri", 32, "bold"),
+            )
+            return
+
         root.after(DELAY, game_loop)
- 
+
     game_loop()
+ 

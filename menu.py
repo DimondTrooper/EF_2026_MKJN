@@ -1,6 +1,7 @@
 from tkinter import *
 from tkinter import messagebox
 import game
+import winsound
  
 def mode_menu():
     #clear old widgets->feels like switching
