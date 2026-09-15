@@ -80,12 +80,22 @@ PLAYER_KEYS = {
 def clamp(value, min_value, max_value):
     return max(min_value, min(value, max_value))
 
-
-def random_spawn_position(width, height):
-    """Zufaellige Position mit Abstand zum Bildschirmrand (SPAWN_MARGIN)."""
-    x = random.randint(SPAWN_MARGIN, width - SPAWN_MARGIN)
-    y = random.randint(SPAWN_MARGIN, height - SPAWN_MARGIN)
-    return x, y
+#Claude code to avoide spawing in trees 
+def random_spawn_position(width, height, avoid_boxes=None, half_w=0, half_h=0, max_attempts=50):
+    """Zufaellige Position mit Abstand zum Bildschirmrand (SPAWN_MARGIN).
+    Ist avoid_boxes gesetzt, wird eine Position gesucht, an der eine Box der
+    Groesse (2*half_w, 2*half_h) keine dieser Boxen ueberlappt -- damit z.B.
+    Panzer nicht auf einem Baum spawnen."""
+    for _ in range(max_attempts):
+        x = random.randint(SPAWN_MARGIN, width - SPAWN_MARGIN)
+        y = random.randint(SPAWN_MARGIN, height - SPAWN_MARGIN)
+        if not avoid_boxes:
+            return x, y
+        candidate_box = (x - half_w, y - half_h, x + half_w, y + half_h)
+        if not any(rects_overlap(candidate_box, box) for box in avoid_boxes):
+            return x, y
+    return x, y  # kein freier Platz gefunden -- letzte Position notgedrungen nehmen
+###
 
 
 def load_tree_photo(path):
@@ -292,16 +302,23 @@ def run_game(root, mode):
     obstacle_boxes = spawn_obstacles(canvas, WIDTH, HEIGHT, tree_photos)
 
     tank_images = get_tank_images()
- 
-    spawn1_x, spawn1_y = random_spawn_position(WIDTH, HEIGHT)
-    spawn2_x, spawn2_y = random_spawn_position(WIDTH, HEIGHT)
+
+    tree_boxes = [tree["box"] for tree in obstacle_boxes]
+    tank_half_w = tank_images[0].width() // 2
+    tank_half_h = tank_images[0].height() // 2
+
+    def random_tank_spawn():
+        return random_spawn_position(WIDTH, HEIGHT, tree_boxes, tank_half_w, tank_half_h)
+
+    spawn1_x, spawn1_y = random_tank_spawn()
+    spawn2_x, spawn2_y = random_tank_spawn()
 
     players = [
         create_player(root, canvas, "Spieler 1", PLAYER_KEYS[1], tank_images, spawn1_x, spawn1_y),
         create_player(root, canvas, "Spieler 2", PLAYER_KEYS[2], tank_images, spawn2_x, spawn2_y),
     ]
     if mode == "1 vs 1 vs 1":
-        spawn3_x, spawn3_y = random_spawn_position(WIDTH, HEIGHT)
+        spawn3_x, spawn3_y = random_tank_spawn()
         players.append(
             create_player(root, canvas, "Spieler 3", PLAYER_KEYS[3], tank_images, spawn3_x, spawn3_y)
         )
