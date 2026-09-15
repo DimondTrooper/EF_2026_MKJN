@@ -84,8 +84,10 @@ def controls_screen(mode):
  
 root = Tk()
 root.title('Tank Game')
+#Code to make the window fullscreen and allow exiting fullscreen with Escape key from Claude
 root.attributes('-fullscreen', True)
 root.bind('<Escape>', lambda e: root.attributes('-fullscreen', False))
+##
 root.option_add('*Font', 'Calibri 12')
 root.option_add('*Background', 'white')
 # start app on menufunct

@@ -1,10 +1,12 @@
 from tkinter import Canvas
 from PIL import Image, ImageTk
+from build_tank_images import get_tank_images
  
-SPEED = 5
+SPEED = 3
 FPS = 60
 DELAY = int(1000 / FPS)
- 
+
+tank_images = get_tank_images()
  
 def run_game(root, mode):
     # altes Frame (Controls-Screen) weg
@@ -17,6 +19,8 @@ def run_game(root, mode):
     canvas = Canvas(root, width=WIDTH, height=HEIGHT, bg="darkgreen")
     canvas.pack()
  
+    original_pil_img = Image.open("Assets/Tank_Red_Forward.png")
+    original_pil_img.thumbnail((50, 50))
     original_pil_img = Image.open("Assets/Tank_Red_Forward.png")
     original_pil_img.thumbnail((50, 50))
  
@@ -68,13 +72,6 @@ def run_game(root, mode):
         if "d" in keys_pressed:
             dx += SPEED
             new_angle = 270
- 
-        if new_angle != state["angle"]:
-            state["angle"] = new_angle
-            state["tank_img"] = get_rotated_image(new_angle)
-            canvas.itemconfig(tank, image=state["tank_img"])
-            tank_width = state["tank_img"].width()
-            tank_height = state["tank_img"].height()
  
         if dx != 0 or dy != 0:
             x, y = canvas.coords(tank)
