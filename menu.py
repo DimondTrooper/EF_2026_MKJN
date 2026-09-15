@@ -16,11 +16,11 @@ def mode_menu():
     label_desc.place(relx=0.1, rely=0.35, relwidth=0.8, relheight=0.1)
  
     #button for mode1(string->controls screen)
-    btn_1=Button(frame, text='1 VS 1 Mode', bg='yellow', command=lambda: controls_screen('1 vs 1'))
+    btn_1=Button(frame, text='1 VS 1 Mode', bg='lightgreen', command=lambda: controls_screen('1 vs 1'))
     btn_1.place(relx=0.3, rely=0.5, relwidth=0.4, relheight=0.1)
  
     #btn for mode2
-    btn_2=Button(frame, text='1 VS 1 VS 1 Mode', bg='yellow', command=lambda: controls_screen('1 vs 1 vs 1'))
+    btn_2=Button(frame, text='1 VS 1 VS 1 Mode', bg='lightblue', command=lambda: controls_screen('1 vs 1 vs 1'))
     btn_2.place(relx=0.3, rely=0.65, relwidth=0.4, relheight=0.1)
  
 def controls_screen(mode):
@@ -32,8 +32,11 @@ def controls_screen(mode):
     frame.place(relx=0, rely=0, relwidth=1.0, relheight=1.0)
  
     #check selected mode(->change text header)
-    text_mode='1 vs 1 Controls' if mode == '1 vs 1' else '1 vs 1 vs 1 Controls'
-    label=Label(frame, text=text_mode, fg='green', font=('Calibri', 20, 'bold'))
+    if mode == '1 vs 1':
+        text_mode='1 vs 1 Controls'
+    else:
+        text_mode='1 vs 1 vs 1 Controls'
+    label=Label(frame, text=text_mode, fg='brown', font=('Calibri', 20, 'bold'))
     label.place(relx=0.2, rely=0.05, relwidth=0.6, relheight=0.1)
     #go-back-to-menu btn
     btn_back=Button(frame, text='← Return', bg='lightgray', command=mode_menu)
@@ -79,15 +82,13 @@ def controls_screen(mode):
         player_box(0.7, 'Controls Player 3', p3_text)
  
     #play btn
-    btn_play = Button(frame, text='Play', bg='lightgreen', font=('Calibri', 14, 'bold'), command=lambda: game.run_game(root, mode))
+    btn_play = Button(frame, text='Play', bg='orange', font=('Calibri', 14, 'bold'), command=lambda: game.run_game(root, mode))
     btn_play.place(relx=0.35, rely=0.75, relwidth=0.3, relheight=0.08)
  
 root = Tk()
 root.title('Tank Game')
-#Code to make the window fullscreen and allow exiting fullscreen with Escape key from Claude
 root.attributes('-fullscreen', True)
 root.bind('<Escape>', lambda e: root.attributes('-fullscreen', False))
-##
 root.option_add('*Font', 'Calibri 12')
 root.option_add('*Background', 'white')
 # start app on menufunct
