@@ -7,7 +7,7 @@ FPS = 60
 DELAY = int(1000 / FPS)
  
 # alle wie viele Frames ein ANGLE_STEP weitergedreht wird
-ROTATE_STEP_EVERY = 4
+ROTATE_STEP_EVERY = 8
  
 SHOOT_COOLDOWN = 4     # Sekunden zwischen Schuessen
 PROJECTILE_SPEED = 8
@@ -41,7 +41,8 @@ ANGLE_TO_VECTOR = {
 # Tastenbelegung pro Spieler -- muss zu controls_screen() in menu.py passen
 PLAYER_KEYS = {
     1: {"up": "w", "down": "s", "left": "a", "right": "d", "shoot": "e"},
-    2: {"up": "up", "down": "down", "left": "left", "right": "right", "shoot": "Control_R"},
+    2: {"up": "f", "down": "h", "left": "g", "right": "j", "shoot": "u"},
+    3: {"up": "up", "down": "down", "left": "left", "right": "right", "shoot": "Control_L"},
 }
  
  
@@ -63,14 +64,21 @@ def next_step_towards(current, target):
     if forward_dist <= backward_dist:
         return ANGLE_STEPS[(i_current + 1) % n]
     return ANGLE_STEPS[(i_current - 1) % n]
- 
- 
-def create_player(root, canvas, keys, tank_images, start_x, start_y):
+
+def rects_overlap(a, b):
+    """a, b je (x1, y1, x2, y2). True, wenn sich die beiden Rechtecke ueberschneiden."""
+    ax1, ay1, ax2, ay2 = a
+    bx1, by1, bx2, by2 = b
+    return not (ax2 < bx1 or ax1 > bx2 or ay2 < by1 or ay1 > by2)
+  
+def create_player(root, canvas, name, keys, tank_images, start_x, start_y):
 
     tank = canvas.create_image(start_x, start_y, image=tank_images[0])
  
     player = {
         "tank": tank,
+        "name": name,
+        "alive": True,
         "tank_images": tank_images,
         "tank_width": tank_images[0].width(),
         "tank_height": tank_images[0].height(),
@@ -85,6 +93,8 @@ def create_player(root, canvas, keys, tank_images, start_x, start_y):
     }
  
     def on_shoot(event):
+        if not player["alive"]:
+            return # Spieler tot -> keine Schuesse mehr
         state = player["state"]
         now = time.time()
         if now - state["last_shot_time"] < SHOOT_COOLDOWN:
@@ -108,6 +118,8 @@ def create_player(root, canvas, keys, tank_images, start_x, start_y):
  
  
 def update_player(canvas, player, keys_pressed, width, height):
+    if not player["alive"]:
+        return  # Spieler tot -> keine Updates mehr
     """Ein Frame Logik fuer GENAU EINEN Spieler: Drehen, Bewegen, Projektile."""
     keys = player["keys"]
     state = player["state"]
@@ -130,7 +142,10 @@ def update_player(canvas, player, keys_pressed, width, height):
         dx += SPEED
  
     key = (up, down, left, right)
-    if key in DIRECTION_TO_ANGLE:
+    # neues Ziel nur uebernehmen, wenn die vorherige Drehung fertig ist --
+    # sonst kann man durch schnelles Tastenwechseln Drehungen aneinanderreihen
+    # und den Panzer beliebig lange weiterdrehen lassen
+    if key in DIRECTION_TO_ANGLE and state["angle"] == state["target_angle"]:
         state["target_angle"] = DIRECTION_TO_ANGLE[key]
  
     if state["angle"] != state["target_angle"]:
@@ -156,8 +171,27 @@ def update_player(canvas, player, keys_pressed, width, height):
         if x2 < 0 or x1 > width or y2 < 0 or y1 > height:
             canvas.delete(p["id"])
             player["projectiles"].remove(p)
- 
- 
+
+
+def check_hits(canvas, players):
+    """Prueft fuer alle Spieler, ob eines ihrer Projektile einen anderen (lebenden) Panzer trifft."""
+    for shooter in players:
+        for p in shooter["projectiles"][:]:
+            bullet_box = canvas.coords(p["id"])
+
+            for target in players:
+                if target is shooter or not target["alive"]:
+                    continue
+
+                tank_box = canvas.bbox(target["tank"])
+                if tank_box and rects_overlap(bullet_box, tank_box):
+                    target["alive"] = False
+                    canvas.delete(target["tank"])
+                    canvas.delete(p["id"])
+                    shooter["projectiles"].remove(p)
+                    break
+
+
 def run_game(root, mode):
     # altes Frame (Controls-Screen) weg
     for widget in root.winfo_children():
@@ -172,12 +206,12 @@ def run_game(root, mode):
     tank_images = get_tank_images()
  
     players = [
-        create_player(root, canvas, PLAYER_KEYS[1], tank_images, WIDTH // 3, HEIGHT // 2),
-        create_player(root, canvas, PLAYER_KEYS[2], tank_images, WIDTH * 2 // 3, HEIGHT // 2),
+        create_player(root, canvas,"Spieler 1", PLAYER_KEYS[1], tank_images, WIDTH // 3, HEIGHT // 2),
+        create_player(root, canvas, "Spieler 2", PLAYER_KEYS[2], tank_images, WIDTH * 2 // 3, HEIGHT // 2),
     ]
     if mode == "1 vs 1 vs 1":
         players.append(
-            create_player(root, canvas, PLAYER_KEYS[3], tank_images, WIDTH // 2, HEIGHT // 4)
+            create_player(root, canvas, "Spieler 3", PLAYER_KEYS[3], tank_images, WIDTH // 2, HEIGHT // 4)
         )
  
     keys_pressed = set()
@@ -194,8 +228,19 @@ def run_game(root, mode):
     def game_loop():
         for player in players:
             update_player(canvas, player, keys_pressed, WIDTH, HEIGHT)
- 
+
+        check_hits(canvas, players)
+
+        alive_players = [p for p in players if p["alive"]]
+        if len(alive_players) <= 1:
+            winner_text = f"{alive_players[0]['name']} gewinnt!" if alive_players else "Unentschieden!"
+            canvas.create_text(
+                WIDTH // 2, HEIGHT // 2,
+                text=winner_text, fill="white", font=("Calibri", 32, "bold"),
+            )
+            return
+
         root.after(DELAY, game_loop)
- 
+
     game_loop()
  
