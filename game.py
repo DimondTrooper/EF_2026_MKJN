@@ -1,11 +1,14 @@
 from tkinter import Canvas
+from PIL import Image, ImageTk
 from build_tank_images import get_tank_images
- 
-SPEED = 3
+
+BACKGROUND_PATH = "Assets/Map_Hintergrund.png"
+
+SPEED = 1
 FPS = 60
 DELAY = int(1000 / FPS)
 # ANGLE_STEPS muss der Reihenfolge im Kreis entsprechen (fuer next_step_towards)
-ROTATE_STEP_EVERY = 2
+ROTATE_STEP_EVERY = 10
  
 # ANGLE_STEPS muss der Reihenfolge im Kreis entsprechen (fuer next_step_towards)
 ANGLE_STEPS = [0, 45, 90, 135, 180, 225, 270, 315]
@@ -59,9 +62,14 @@ def run_game(root, mode):
  
     canvas = Canvas(root, width=WIDTH, height=HEIGHT, bg="darkgreen")
     canvas.pack()
- 
+
+    background_image = Image.open(BACKGROUND_PATH).resize((WIDTH, HEIGHT))
+    background_photo = ImageTk.PhotoImage(background_image)
+    canvas.background_photo = background_photo  # Referenz halten, sonst Garbage Collection
+    canvas.create_image(0, 0, anchor="nw", image=background_photo)
+
     tank_images = get_tank_images()
- 
+
     tank = canvas.create_image(WIDTH // 2, HEIGHT // 2, image=tank_images[0])
     tank_width = tank_images[0].width()
     tank_height = tank_images[0].height()
@@ -69,6 +77,7 @@ def run_game(root, mode):
     state = {
         "angle": 0,
         "target_angle": 0,
+        "frame_counter": 0,
     }
  
     keys_pressed = set()
