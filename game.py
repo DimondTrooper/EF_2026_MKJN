@@ -44,7 +44,7 @@ ANGLE_TO_VECTOR = {
 # Tastenbelegung pro Spieler -- muss zu controls_screen() in menu.py passen
 PLAYER_KEYS = {
     1: {"up": "w", "down": "s", "left": "a", "right": "d", "shoot": "e"},
-    2: {"up": "f", "down": "h", "left": "g", "right": "j", "shoot": "u"},
+    2: {"up": "up", "down": "down", "left": "left", "right": "right", "shoot": "Control_R"},
     3: {"up": "up", "down": "down", "left": "left", "right": "right", "shoot": "Control_L"},
 }
  
