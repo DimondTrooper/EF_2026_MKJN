@@ -4,9 +4,17 @@ from build_tank_images import get_tank_images
 SPEED = 3
 FPS = 60
 DELAY = int(1000 / FPS)
+# ANGLE_STEPS muss der Reihenfolge im Kreis entsprechen (fuer next_step_towards)
+ROTATE_STEP_EVERY = 2
  
 # ANGLE_STEPS muss der Reihenfolge im Kreis entsprechen (fuer next_step_towards)
 ANGLE_STEPS = [0, 45, 90, 135, 180, 225, 270, 315]
+
+state = {
+    "angle": 0,
+    "target_angle": 0,
+    "frame_counter": 0,
+}
  
 DIRECTION_TO_ANGLE = {
     (True, False, False, False): 0,    # nur oben
@@ -96,12 +104,15 @@ def run_game(root, mode):
         key = (up, down, left, right)
         if key in DIRECTION_TO_ANGLE:
             state["target_angle"] = DIRECTION_TO_ANGLE[key]
- 
+
         if state["angle"] != state["target_angle"]:
-            state["angle"] = next_step_towards(state["angle"], state["target_angle"])
-            canvas.itemconfig(tank, image=tank_images[state["angle"]])
-            tank_width = tank_images[state["angle"]].width()
-            tank_height = tank_images[state["angle"]].height()
+                state["frame_counter"] += 1
+                if state["frame_counter"] >= ROTATE_STEP_EVERY:
+                    state["frame_counter"] = 0
+                    state["angle"] = next_step_towards(state["angle"], state["target_angle"])
+                    canvas.itemconfig(tank, image=tank_images[state["angle"]])
+                    tank_width = tank_images[state["angle"]].width()
+                    tank_height = tank_images[state["angle"]].height()
  
         if dx != 0 or dy != 0:
             x, y = canvas.coords(tank)

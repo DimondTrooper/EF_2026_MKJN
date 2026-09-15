@@ -9,8 +9,8 @@ und tank_images aus der bisherigen game.py.
  
 from PIL import Image, ImageTk
  
-BASE_STRAIGHT = "Assets/Tank_Red_Straight.png"  # 0 Grad, zeigt "oben"
-BASE_DIAGONAL = "Assets/Tank_Red_Diagonal.png"  # 45 Grad, zeigt "oben-rechts"
+BASE_STRAIGHT = "Assets/Tank_Blue_Straight.png"  # 0 Grad, zeigt "oben"
+BASE_DIAGONAL = "Assets/Tank_Blue_Diagonal.png"  # 45 Grad, zeigt "oben-rechts"
  
 SIZE = (50, 50)
  
