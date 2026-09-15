@@ -1,7 +1,10 @@
 import time
 from tkinter import Canvas
+from PIL import Image, ImageTk
 from build_tank_images import get_tank_images
- 
+
+BACKGROUND_PATH = "Assets/Map_real.png"
+
 SPEED = 1.5
 FPS = 60
 DELAY = int(1000 / FPS)
@@ -202,6 +205,11 @@ def run_game(root, mode):
  
     canvas = Canvas(root, width=WIDTH, height=HEIGHT, bg="darkgreen")
     canvas.pack()
+
+    background_image = Image.open(BACKGROUND_PATH).resize((WIDTH, HEIGHT))
+    background_photo = ImageTk.PhotoImage(background_image)
+    canvas.background_photo = background_photo  # Referenz halten, sonst Garbage Collection
+    canvas.create_image(0, 0, anchor="nw", image=background_photo)
 
     tank_images = get_tank_images()
  
