@@ -1,14 +1,19 @@
+import winsound
+
 from tkinter import Canvas
 from PIL import Image, ImageTk
 from build_tank_images import get_tank_images
 
 BACKGROUND_PATH = "Assets/Map_Hintergrund.png"
+SHOOT_SOUND_PATH = "Sounds/Shoot.wav"
+SHOOT_SOUND_DELAY_MS = 825  # winsound braucht bei dieser Datei ca. 0.8s, bis der Sound wirklich hoerbar startet
 
 SPEED = 1
 FPS = 60
 DELAY = int(1000 / FPS)
 # ANGLE_STEPS muss der Reihenfolge im Kreis entsprechen (fuer next_step_towards)
 ROTATE_STEP_EVERY = 10
+BARREL_OFFSET = 50
  
 # ANGLE_STEPS muss der Reihenfolge im Kreis entsprechen (fuer next_step_towards)
 ANGLE_STEPS = [0, 45, 90, 135, 180, 225, 270, 315]
@@ -28,6 +33,17 @@ DIRECTION_TO_ANGLE = {
     (False, True, True, False): 135,   # unten + links
     (False, False, True, False): 90,   # nur links
     (True, False, True, False): 45,    # oben + links
+}
+
+ANGLE_TO_VECTOR = {
+    0:   (0, -1),   # oben
+    45:  (-1, -1),  # oben-links
+    90:  (-1, 0),   # links
+    135: (-1, 1),   # unten-links
+    180: (0, 1),    # unten
+    225: (1, 1),    # unten-rechts
+    270: (1, 0),    # rechts
+    315: (1, -1),   # oben-rechts
 }
  
  
@@ -78,7 +94,11 @@ def run_game(root, mode):
         "angle": 0,
         "target_angle": 0,
         "frame_counter": 0,
+        "alive": True,
     }
+    projectiles = []
+    PROJECTILE_SPEED = 8 
+    PROJECTILE_RADIUS = 4
  
     keys_pressed = set()
  
@@ -87,9 +107,28 @@ def run_game(root, mode):
  
     def on_key_up(event):
         keys_pressed.discard(event.keysym.lower())
+    def on_shoot(event):
+        x, y = canvas.coords(tank)
+        dx, dy = ANGLE_TO_VECTOR[state["angle"]]
+        start_x = x + dx * BARREL_OFFSET
+        start_y = y + dy * BARREL_OFFSET
+
+        winsound.PlaySound(SHOOT_SOUND_PATH, winsound.SND_FILENAME | winsound.SND_ASYNC)
+
+        def spawn_bullet():
+            bullet = canvas.create_oval(
+                start_x - PROJECTILE_RADIUS, start_y - PROJECTILE_RADIUS,
+                start_x + PROJECTILE_RADIUS, start_y + PROJECTILE_RADIUS,
+                fill="black",
+            )
+            projectiles.append({"id": bullet, "dx": dx, "dy": dy})
+
+        root.after(SHOOT_SOUND_DELAY_MS, spawn_bullet)
  
     root.bind("<KeyPress>", on_key_down)
     root.bind("<KeyRelease>", on_key_up)
+    root.bind("<KeyPress-e>", on_shoot)
+
  
     def game_loop():
         nonlocal tank_width, tank_height
@@ -130,6 +169,13 @@ def run_game(root, mode):
             new_x = clamp(x + dx, half_w, WIDTH - half_w)
             new_y = clamp(y + dy, half_h, HEIGHT - half_h)
             canvas.move(tank, new_x - x, new_y - y)
+
+        for p in projectiles[:]:  # Kopie der Liste -- sonst Probleme beim Entfernen waehrend der Iteration
+            canvas.move(p["id"], p["dx"] * PROJECTILE_SPEED, p["dy"] * PROJECTILE_SPEED)
+            x1, y1, x2, y2 = canvas.coords(p["id"])
+            if x2 < 0 or x1 > WIDTH or y2 < 0 or y1 > HEIGHT:
+                canvas.delete(p["id"])
+                projectiles.remove(p)
  
         root.after(DELAY, game_loop)
  
