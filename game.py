@@ -6,11 +6,17 @@ import pygame
 from tkinter import Canvas
 from PIL import Image, ImageTk
 from build_tank_images import get_tank_images
+import random
 
 BACKGROUND_PATH = "Assets/Map_real.png"
 SHOOT_SOUND_PATH = "Sounds/Shoot.wav"
 MOVE_SOUND_PATH = "Sounds/Tank_moving.wav"
 MOVE_SOUND_FADEOUT_MS = 300  # sanftes Ausklingen statt hartem Stopp
+
+TREE_IMAGE_PATHS = ["Assets/Tree_1.png", "Assets/Tree_2.png"]
+TREE_SCALE = 0.8  # 20% kleiner als die Originalgrafik
+OBSTACLE_MIN_COUNT = 5
+OBSTACLE_MAX_COUNT = 10
 
 pygame.mixer.init()
 SHOOT_SOUND = pygame.mixer.Sound(SHOOT_SOUND_PATH)
@@ -24,6 +30,8 @@ DELAY = int(1000 / FPS)
 # wie oft/schnell man Tasten drueckt, kann sich der Panzer nicht schneller
 # drehen als das hier erlaubt
 ROTATE_COOLDOWN = 0.12
+
+SPAWN_MARGIN = 60  # Abstand (Pixel) zum Bildschirmrand, in dem kein Panzer spawnt
 
 # kurze Pause (Sekunden) NACH einer abgeschlossenen Drehung, bevor eine neue
 # Drehung angenommen wird -- zusaetzlich zur Regel, dass die aktuelle Drehung
@@ -71,8 +79,35 @@ PLAYER_KEYS = {
  
 def clamp(value, min_value, max_value):
     return max(min_value, min(value, max_value))
- 
- 
+
+
+def random_spawn_position(width, height):
+    """Zufaellige Position mit Abstand zum Bildschirmrand (SPAWN_MARGIN)."""
+    x = random.randint(SPAWN_MARGIN, width - SPAWN_MARGIN)
+    y = random.randint(SPAWN_MARGIN, height - SPAWN_MARGIN)
+    return x, y
+
+
+def load_tree_photo(path):
+    img = Image.open(path)
+    new_size = (round(img.width * TREE_SCALE), round(img.height * TREE_SCALE))
+    return ImageTk.PhotoImage(img.resize(new_size))
+
+
+def spawn_obstacles(canvas, width, height, tree_photos):
+    """Platziert die Baeume und gibt sie als Liste von {"id", "box"} zurueck
+    (fuer Kollision -- ein von einem Projektil getroffener Baum wird daraus
+    entfernt und von der Canvas geloescht)."""
+    count = random.randint(OBSTACLE_MIN_COUNT, OBSTACLE_MAX_COUNT)
+    obstacles = []
+    for _ in range(count):
+        x, y = random_spawn_position(width, height)
+        photo = random.choice(tree_photos)
+        tree_id = canvas.create_image(x, y, image=photo)
+        obstacles.append({"id": tree_id, "box": canvas.bbox(tree_id)})
+    return obstacles
+
+
 def next_step_towards(current, target):
     """Naechster Winkel aus ANGLE_STEPS auf dem kuerzesten Weg zu target."""
     if current == target:
@@ -141,7 +176,7 @@ def create_player(root, canvas, name, keys, tank_images, start_x, start_y):
     return player
  
  
-def update_player(canvas, player, keys_pressed, width, height):
+def update_player(canvas, player, keys_pressed, width, height, obstacles):
     if not player["alive"]:
         player["moving"] = False
         return  # Spieler tot -> keine Updates mehr
@@ -164,7 +199,7 @@ def update_player(canvas, player, keys_pressed, width, height):
     if left:
         dx -= SPEED
     if right:
-        dx += SPEED
+        dx += SPEED 
  
     key = (up, down, left, right)
     now = time.time()
@@ -189,20 +224,30 @@ def update_player(canvas, player, keys_pressed, width, height):
             if state["angle"] == state["target_angle"]:
                 state["rotation_ready_time"] = now + ROTATE_RESTART_COOLDOWN
 
-    player["moving"] = dx != 0 or dy != 0
+    wants_to_move = dx != 0 or dy != 0
+    player["moving"] = False
 
-    if player["moving"]:
+    if wants_to_move:
         x, y = canvas.coords(player["tank"])
         half_w = player["tank_width"] // 2
         half_h = player["tank_height"] // 2
         new_x = clamp(x + dx, half_w, width - half_w)
         new_y = clamp(y + dy, half_h, height - half_h)
-        canvas.move(player["tank"], new_x - x, new_y - y)
- 
+        new_box = (new_x - half_w, new_y - half_h, new_x + half_w, new_y + half_h)
+        blocked = any(rects_overlap(new_box, tree["box"]) for tree in obstacles)
+        if not blocked:
+            canvas.move(player["tank"], new_x - x, new_y - y)
+            player["moving"] = True
+
     for p in player["projectiles"][:]:
         canvas.move(p["id"], p["dx"] * PROJECTILE_SPEED, p["dy"] * PROJECTILE_SPEED)
-        x1, y1, x2, y2 = canvas.coords(p["id"])
-        if x2 < 0 or x1 > width or y2 < 0 or y1 > height:
+        bullet_box = canvas.coords(p["id"])
+        x1, y1, x2, y2 = bullet_box
+        hit_tree = next((tree for tree in obstacles if rects_overlap(bullet_box, tree["box"])), None)
+        if hit_tree is not None:
+            canvas.delete(hit_tree["id"])
+            obstacles.remove(hit_tree)
+        if x2 < 0 or x1 > width or y2 < 0 or y1 > height or hit_tree is not None:
             canvas.delete(p["id"])
             player["projectiles"].remove(p)
 
@@ -242,15 +287,23 @@ def run_game(root, mode):
     canvas.background_photo = background_photo  # Referenz halten, sonst Garbage Collection
     canvas.create_image(0, 0, anchor="nw", image=background_photo)
 
+    tree_photos = [load_tree_photo(path) for path in TREE_IMAGE_PATHS]
+    canvas.tree_photos = tree_photos  # Referenz halten, sonst Garbage Collection
+    obstacle_boxes = spawn_obstacles(canvas, WIDTH, HEIGHT, tree_photos)
+
     tank_images = get_tank_images()
  
+    spawn1_x, spawn1_y = random_spawn_position(WIDTH, HEIGHT)
+    spawn2_x, spawn2_y = random_spawn_position(WIDTH, HEIGHT)
+
     players = [
-        create_player(root, canvas,"Spieler 1", PLAYER_KEYS[1], tank_images, WIDTH // 3, HEIGHT // 2),
-        create_player(root, canvas, "Spieler 2", PLAYER_KEYS[2], tank_images, WIDTH * 2 // 3, HEIGHT // 2),
+        create_player(root, canvas, "Spieler 1", PLAYER_KEYS[1], tank_images, spawn1_x, spawn1_y),
+        create_player(root, canvas, "Spieler 2", PLAYER_KEYS[2], tank_images, spawn2_x, spawn2_y),
     ]
     if mode == "1 vs 1 vs 1":
+        spawn3_x, spawn3_y = random_spawn_position(WIDTH, HEIGHT)
         players.append(
-            create_player(root, canvas, "Spieler 3", PLAYER_KEYS[3], tank_images, WIDTH // 2, HEIGHT // 4)
+            create_player(root, canvas, "Spieler 3", PLAYER_KEYS[3], tank_images, spawn3_x, spawn3_y)
         )
  
     keys_pressed = set()
@@ -270,7 +323,7 @@ def run_game(root, mode):
         nonlocal move_channel
 
         for player in players:
-            update_player(canvas, player, keys_pressed, WIDTH, HEIGHT)
+            update_player(canvas, player, keys_pressed, WIDTH, HEIGHT, obstacle_boxes)
 
         any_moving = any(p["moving"] for p in players)
         if any_moving and move_channel is None:
