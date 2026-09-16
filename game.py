@@ -14,6 +14,21 @@ BACKGROUND_PATH = "Assets/Map_Hintergrund.png"
 SHOOT_SOUND_PATH = "Sounds/Shoot.wav"
 MOVE_SOUND_PATH = "Sounds/Tank_moving.wav"
 MOVE_SOUND_FADEOUT_MS = 300
+MOVE_SOUND_VOLUME = 0.25
+IDLE_TANK_SOUND_PATH = "Sounds/idle_Tank.wav"
+IDLE_TANK_SOUND_VOLUME = 0.18
+AMBIENT_SOUND_PATHS = [
+    "Sounds/Ambient_Sounds/breeze-tree.wav",
+    "Sounds/Ambient_Sounds/distant-explosions.wav",
+    "Sounds/Ambient_Sounds/propeller-planewav.wav",
+]
+AMBIENT_SOUND_VOLUME = 0.12
+BREEZE_SOUND_VOLUME = 0.28
+DISTANT_EXPLOSION_MIN_DELAY = 6
+DISTANT_EXPLOSION_MAX_DELAY = 12
+PLANE_MIN_DELAY = 35
+PLANE_MAX_DELAY = 60
+AMBIENT_SOUND_FADEOUT_MS = 800
 
 TREE_IMAGE_PATHS = ["Assets/Tree_1.png", "Assets/Tree_2.png"]
 TREE_TRUNK_PATH = "Assets/Tree_Trunk.png"
@@ -40,8 +55,16 @@ EXPLOSION_FRAME_MS = 80
 EXPLOSION_DISPLAY_SIZE = 110
 
 pygame.mixer.init()
+pygame.mixer.set_num_channels(16)
 SHOOT_SOUND = pygame.mixer.Sound(SHOOT_SOUND_PATH)
 MOVE_SOUND = pygame.mixer.Sound(MOVE_SOUND_PATH)
+MOVE_SOUND.set_volume(MOVE_SOUND_VOLUME)
+IDLE_TANK_SOUND = pygame.mixer.Sound(IDLE_TANK_SOUND_PATH)
+IDLE_TANK_SOUND.set_volume(IDLE_TANK_SOUND_VOLUME)
+AMBIENT_SOUNDS = [pygame.mixer.Sound(path) for path in AMBIENT_SOUND_PATHS]
+AMBIENT_SOUNDS[0].set_volume(BREEZE_SOUND_VOLUME)
+AMBIENT_SOUNDS[1].set_volume(AMBIENT_SOUND_VOLUME)
+AMBIENT_SOUNDS[2].set_volume(AMBIENT_SOUND_VOLUME)
 
 SPEED = 1
 FPS = 60
@@ -155,6 +178,48 @@ def load_explosion_frames():
         centered.paste(resized, offset, resized)
         frames.append(ImageTk.PhotoImage(centered))
     return frames
+
+
+def start_ambient_sounds():
+    """
+    Macht: Startet den Wind als Loop und plant Flugzeug sowie entfernte Explosionen.
+    Input: keine
+    Output: Dict mit Sound-Kanaelen und naechsten Abspielzeiten
+    """
+    now = time.time()
+    return {
+        "channels": [AMBIENT_SOUNDS[0].play(loops=-1)],
+        "next_explosion_time": now + random.uniform(DISTANT_EXPLOSION_MIN_DELAY, DISTANT_EXPLOSION_MAX_DELAY),
+        "next_plane_time": now + random.uniform(PLANE_MIN_DELAY, PLANE_MAX_DELAY),
+    }
+
+
+def update_ambient_sounds(ambient_state):
+    """
+    Macht: Spielt entfernte Explosionen haeufig und Flugzeuge selten ab.
+    Input: ambient_state (Dict mit Sound-Kanaelen und Abspielzeiten)
+    Output: kein Rueckgabewert
+    """
+    now = time.time()
+    if now >= ambient_state["next_explosion_time"]:
+        ambient_state["channels"].append(AMBIENT_SOUNDS[1].play())
+        ambient_state["next_explosion_time"] = now + random.uniform(
+            DISTANT_EXPLOSION_MIN_DELAY, DISTANT_EXPLOSION_MAX_DELAY
+        )
+    if now >= ambient_state["next_plane_time"]:
+        ambient_state["channels"].append(AMBIENT_SOUNDS[2].play())
+        ambient_state["next_plane_time"] = now + random.uniform(PLANE_MIN_DELAY, PLANE_MAX_DELAY)
+
+
+def stop_ambient_sounds(ambient_state):
+    """
+    Macht: Blendet laufende Hintergrundsounds aus.
+    Input: ambient_state (Dict mit pygame-Mixer-Kanaelen)
+    Output: kein Rueckgabewert
+    """
+    for channel in ambient_state["channels"]:
+        if channel is not None:
+            channel.fadeout(AMBIENT_SOUND_FADEOUT_MS)
 
 
 def load_mine_photo():
@@ -674,6 +739,8 @@ def run_game(root, mode, player_names=None):
     root.bind("<KeyRelease>", on_key_up)
 
     move_channel = None
+    idle_channel = IDLE_TANK_SOUND.play(loops=-1)
+    ambient_state = start_ambient_sounds()
 
     def game_loop():
         """
@@ -683,6 +750,8 @@ def run_game(root, mode, player_names=None):
         Output: kein Rueckgabewert
         """
         nonlocal move_channel
+
+        update_ambient_sounds(ambient_state)
 
         for player in players:
             other_players = [p for p in players if p is not player]
@@ -707,6 +776,9 @@ def run_game(root, mode, player_names=None):
                 return
             if move_channel is not None:
                 move_channel.fadeout(MOVE_SOUND_FADEOUT_MS)
+            if idle_channel is not None:
+                idle_channel.fadeout(MOVE_SOUND_FADEOUT_MS)
+            stop_ambient_sounds(ambient_state)
             winner_text = f"{alive_players[0]['name']} gewinnt!" if alive_players else "Unentschieden!"
             for player_keys in PLAYER_KEYS.values():
                 root.unbind(f"<KeyPress-{player_keys['shoot']}>")
