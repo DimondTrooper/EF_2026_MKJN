@@ -1,6 +1,7 @@
 import os
 os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")  # keine Begruessungs-Ausgabe im Terminal
 
+import math
 import time
 import pygame
 from tkinter import Canvas
@@ -14,7 +15,13 @@ MOVE_SOUND_PATH = "Sounds/Tank_moving.wav"
 MOVE_SOUND_FADEOUT_MS = 300  # sanftes Ausklingen statt hartem Stopp
 
 TREE_IMAGE_PATHS = ["Assets/Tree_1.png", "Assets/Tree_2.png"]
+TREE_TRUNK_PATH = "Assets/Tree_Trunk.png"  # Bild fuer zerstoerte Baeume (rein dekorativ, keine Hitbox)
 TREE_SCALE = 0.8  # 20% kleiner als die Originalgrafik
+# Der Stumpf ist im Rohbild (800x712) voellig anders skaliert als die Baeume
+# (~120x120) -- deshalb NICHT ueber TREE_SCALE, sondern relativ zur
+# tatsaechlichen (bereits skalierten) Baumgroesse auf dem Bildschirm.
+TREE_TRUNK_SIZE_RATIO = 0.5  # 50% der durchschnittlichen Baumgroesse
+TREE_HITBOX_SCALE = 0.85  # Kollisionsradius als Anteil des halben Bildausmasses
 OBSTACLE_MIN_COUNT = 7
 OBSTACLE_MAX_COUNT = 15
 
@@ -32,6 +39,7 @@ DELAY = int(1000 / FPS)
 ROTATE_COOLDOWN = 0.12
 
 SPAWN_MARGIN = 60  # Abstand (Pixel) zum Bildschirmrand, in dem kein Panzer spawnt
+MIN_PLAYER_SPAWN_DISTANCE = 200  # Mindestabstand (Pixel) zwischen zwei Panzer-Spawnpunkten
 
 # kurze Pause (Sekunden) NACH einer abgeschlossenen Drehung, bevor eine neue
 # Drehung angenommen wird -- zusaetzlich zur Regel, dass die aktuelle Drehung
@@ -104,17 +112,44 @@ def load_tree_photo(path):
     return ImageTk.PhotoImage(img.resize(new_size))
 
 
+def load_image_scaled_to(path, target_size):
+    """Skaliert ein Bild so, dass seine groessere Seite target_size Pixel
+    misst (Seitenverhaeltnis bleibt erhalten) -- unabhaengig von der
+    Roh-Aufloesung der Datei."""
+    img = Image.open(path)
+    scale = target_size / max(img.width, img.height)
+    new_size = (round(img.width * scale), round(img.height * scale))
+    return ImageTk.PhotoImage(img.resize(new_size))
+
+
+def circle_rect_overlap(cx, cy, radius, rect):
+    """True, wenn ein Kreis (cx, cy, radius) das Rechteck rect (x1,y1,x2,y2)
+    beruehrt/ueberschneidet. Baeume sind rund/sternfoermig -- eine rein
+    rechteckige Bounding-Box wuerde bis in die transparenten Ecken des
+    Bildes hinein blockieren, ein Kreis passt sich der sichtbaren Form
+    deutlich besser an."""
+    rx1, ry1, rx2, ry2 = rect
+    closest_x = clamp(cx, rx1, rx2)
+    closest_y = clamp(cy, ry1, ry2)
+    dx = cx - closest_x
+    dy = cy - closest_y
+    return (dx * dx + dy * dy) <= radius * radius
+
+
 def spawn_obstacles(canvas, width, height, tree_photos):
-    """Platziert die Baeume und gibt sie als Liste von {"id", "box"} zurueck
-    (fuer Kollision -- ein von einem Projektil getroffener Baum wird daraus
-    entfernt und von der Canvas geloescht)."""
+    """Platziert die Baeume und gibt sie als Liste von
+    {"id", "cx", "cy", "radius"} zurueck (fuer die runde Kollision -- ein
+    von einem Projektil getroffener Baum wird daraus entfernt und von der
+    Canvas geloescht)."""
     count = random.randint(OBSTACLE_MIN_COUNT, OBSTACLE_MAX_COUNT)
     obstacles = []
     for _ in range(count):
         x, y = random_spawn_position(width, height)
         photo = random.choice(tree_photos)
         tree_id = canvas.create_image(x, y, image=photo)
-        obstacles.append({"id": tree_id, "box": canvas.bbox(tree_id)})
+        box = canvas.bbox(tree_id)
+        radius = min(box[2] - box[0], box[3] - box[1]) / 2 * TREE_HITBOX_SCALE
+        obstacles.append({"id": tree_id, "cx": x, "cy": y, "radius": radius})
     return obstacles
 
 
@@ -186,7 +221,7 @@ def create_player(root, canvas, name, keys, tank_images, start_x, start_y):
     return player
  
  
-def update_player(canvas, player, keys_pressed, width, height, obstacles):
+def update_player(canvas, player, keys_pressed, width, height, obstacles, trunk_photo):
     if not player["alive"]:
         player["moving"] = False
         return  # Spieler tot -> keine Updates mehr
@@ -244,7 +279,7 @@ def update_player(canvas, player, keys_pressed, width, height, obstacles):
         new_x = clamp(x + dx, half_w, width - half_w)
         new_y = clamp(y + dy, half_h, height - half_h)
         new_box = (new_x - half_w, new_y - half_h, new_x + half_w, new_y + half_h)
-        blocked = any(rects_overlap(new_box, tree["box"]) for tree in obstacles)
+        blocked = any(circle_rect_overlap(tree["cx"], tree["cy"], tree["radius"], new_box) for tree in obstacles)
         if not blocked:
             canvas.move(player["tank"], new_x - x, new_y - y)
             player["moving"] = True
@@ -253,9 +288,12 @@ def update_player(canvas, player, keys_pressed, width, height, obstacles):
         canvas.move(p["id"], p["dx"] * PROJECTILE_SPEED, p["dy"] * PROJECTILE_SPEED)
         bullet_box = canvas.coords(p["id"])
         x1, y1, x2, y2 = bullet_box
-        hit_tree = next((tree for tree in obstacles if rects_overlap(bullet_box, tree["box"])), None)
+        hit_tree = next(
+            (tree for tree in obstacles if circle_rect_overlap(tree["cx"], tree["cy"], tree["radius"], bullet_box)),
+            None,
+        )
         if hit_tree is not None:
-            canvas.delete(hit_tree["id"])
+            canvas.itemconfig(hit_tree["id"], image=trunk_photo)  # nur noch Stumpf, keine Hitbox mehr
             obstacles.remove(hit_tree)
         if x2 < 0 or x1 > width or y2 < 0 or y1 > height or hit_tree is not None:
             canvas.delete(p["id"])
@@ -301,14 +339,37 @@ def run_game(root, mode):
     canvas.tree_photos = tree_photos  # Referenz halten, sonst Garbage Collection
     obstacle_boxes = spawn_obstacles(canvas, WIDTH, HEIGHT, tree_photos)
 
+    avg_tree_size = sum(max(photo.width(), photo.height()) for photo in tree_photos) / len(tree_photos)
+    trunk_photo = load_image_scaled_to(TREE_TRUNK_PATH, avg_tree_size * TREE_TRUNK_SIZE_RATIO)
+    canvas.trunk_photo = trunk_photo  # Referenz halten, sonst Garbage Collection
+
     tank_images = get_tank_images()
 
-    tree_boxes = [tree["box"] for tree in obstacle_boxes]
     tank_half_w = tank_images[0].width() // 2
     tank_half_h = tank_images[0].height() // 2
+    # grobe Bounding-Box um jeden Baumkreis, nur fuer die Spawn-Platzierung
+    # (muss nicht pixelgenau sein -- es soll nur kein Panzer auf einem Baum landen)
+    tree_boxes = [
+        (tree["cx"] - tree["radius"], tree["cy"] - tree["radius"], tree["cx"] + tree["radius"], tree["cy"] + tree["radius"])
+        for tree in obstacle_boxes
+    ]
+
+    # bereits vergebene Panzer-Spawnpunkte -- neue Punkte muessen zu allen
+    # davon mindestens MIN_PLAYER_SPAWN_DISTANCE (echter euklidischer Abstand,
+    # keine reine Box-Ueberlappung) entfernt sein
+    placed_spawns = []
 
     def random_tank_spawn():
-        return random_spawn_position(WIDTH, HEIGHT, tree_boxes, tank_half_w, tank_half_h)
+        for _ in range(50):
+            x, y = random_spawn_position(WIDTH, HEIGHT, tree_boxes, tank_half_w, tank_half_h)
+            far_enough = all(
+                math.hypot(x - px, y - py) >= MIN_PLAYER_SPAWN_DISTANCE
+                for px, py in placed_spawns
+            )
+            if far_enough:
+                break
+        placed_spawns.append((x, y))
+        return x, y
 
     spawn1_x, spawn1_y = random_tank_spawn()
     spawn2_x, spawn2_y = random_tank_spawn()
@@ -340,7 +401,7 @@ def run_game(root, mode):
         nonlocal move_channel
 
         for player in players:
-            update_player(canvas, player, keys_pressed, WIDTH, HEIGHT, obstacle_boxes)
+            update_player(canvas, player, keys_pressed, WIDTH, HEIGHT, obstacle_boxes, trunk_photo)
 
         any_moving = any(p["moving"] for p in players)
         if any_moving and move_channel is None:
