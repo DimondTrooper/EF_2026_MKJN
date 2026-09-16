@@ -4,7 +4,7 @@ os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
 import math
 import time
 import pygame
-from tkinter import Canvas
+from tkinter import Button, Canvas
 from PIL import Image, ImageTk
 from build_tank_images import get_destroyed_tank_images, get_muzzle_flash_frames, get_tank_images
 from scoreboard import get_leaderboard, record_win, register_players
@@ -822,6 +822,32 @@ def run_game(root, mode, player_names=None):
     idle_channel = IDLE_TANK_SOUND.play(loops=-1)
     ambient_state = start_ambient_sounds()
 
+    game_state = {"active": True}
+
+    def leave_game():
+        """
+        Macht: Bricht die laufende Partie sofort ab, raeumt Tastenbindungen
+               und Sounds auf und kehrt ins Menue zurueck.
+        Input: keine
+        Output: kein Rueckgabewert
+        """
+        if not game_state["active"]:
+            return
+        game_state["active"] = False
+        if move_channel is not None:
+            move_channel.fadeout(MOVE_SOUND_FADEOUT_MS)
+        if idle_channel is not None:
+            idle_channel.fadeout(MOVE_SOUND_FADEOUT_MS)
+        stop_ambient_sounds(ambient_state)
+        for player_keys in PLAYER_KEYS.values():
+            root.unbind(f"<KeyPress-{player_keys['shoot']}>")
+        root.unbind("<KeyPress>")
+        root.unbind("<KeyRelease>")
+        return_to_menu()
+
+    leave_button = Button(root, text="Leave", bg="lightgray", command=leave_game)
+    leave_button.place(relx=0.005, rely=0.01, relwidth=0.1, relheight=0.1)
+
     def game_loop():
         """
         Macht: Fuehrt einen Frame der Spiel-Loop aus (Update, Sound, Treffer,
@@ -830,6 +856,9 @@ def run_game(root, mode, player_names=None):
         Output: kein Rueckgabewert
         """
         nonlocal move_channel
+
+        if not game_state["active"]:
+            return  # Partie wurde ueber den Leave-Button abgebrochen
 
         update_ambient_sounds(ambient_state)
 
@@ -873,6 +902,8 @@ def run_game(root, mode, player_names=None):
                 Input: keine
                 Output: kein Rueckgabewert
                 """
+                if not game_state["active"]:
+                    return  # Spieler hat die Partie inzwischen ueber Leave verlassen
                 show_winner_screen(
                     root,
                     winner_text,

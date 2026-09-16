@@ -1,23 +1,27 @@
+### Claude code für problem bei rückgehen von menu nach spiel
+#menu.py wird als Skript gestartet (python menu.py) und laeuft deshalb als
+#Modul "__main__". game.py macht aber in return_to_menu() ein "import menu".
+#Python findet dann KEIN Modul namens "menu", laedt diese Datei ein ZWEITES
+#Mal von der Festplatte und fuehrt dabei auch "root = Tk()" erneut aus --
+#es entsteht ein zweites Tk-Fenster mit eigenem, getrenntem Interpreter.
+#PhotoImage-Bilder gehoeren aber immer zu genau einem Interpreter. Die Bilder
+#landeten im ersten, die Widgets im zweiten -> "image pyimageX doesn't exist",
+#"invalid command name ...", "application has been destroyed".
+#Fix: dieses Modul zusaetzlich unter dem Namen "menu" registrieren, damit
+#"import menu" genau dieses Modul zurueckgibt statt es neu zu laden.
+import sys
+sys.modules.setdefault('menu', sys.modules[__name__])
+### Claude code für problem bei rückgehen von menu nach spiel
+
 from tkinter import *
 import game
-import gc
+from tkinter import messagebox
 import os
 
 def mode_menu():
     #clear old widgets->feels like switching
     for widget in root.winfo_children():
         widget.destroy()
-
-    ### Claude code für problem bei rückgehen von menu nach spiel
-    #nach einer Partie haengen sehr viele Panzer-/Explosionsbilder aus dem
-    #Spiel im zyklischen Garbage Collector; Tk vergibt Bildnamen fortlaufend
-    #und recycelt freigewordene Nummern. Ohne diesen expliziten Collect-Aufruf
-    #kann ein spaeter (verzoegert) aufgeraeumtes altes Spielbild zufaellig
-    #denselben Namen wie ein gerade frisch erstelltes Menue-Bild bekommen und
-    #es beim Aufraeumen aus Tk loeschen -> Bilder verschwinden oder Screens
-    #brechen mitten in der Erstellung ab (siehe controls_screen/name_input_screen).
-    gc.collect()
-    ### Claude code für problem bei rückgehen von menu nach spiel
 
     frame=Frame(root, bd=0)
     frame.place(relx=0, rely=0, relwidth=1.0, relheight=1.0)
@@ -34,13 +38,13 @@ def mode_menu():
         
         green_path = os.path.join(script_dir, 'Assets', 'Tank_Green_Homescreen.png')
         blue_path = os.path.join(script_dir, 'Assets', 'Tank_Blue_Homescreen.png')
-        
+
         raw_img_green = PhotoImage(file=green_path)
         raw_img_blue = PhotoImage(file=blue_path)
-        
+
         tank_left_img = raw_img_green.subsample(2, 2)
         tank_right_img = raw_img_blue.subsample(2, 2)
-        
+
         Label(frame, image=tank_left_img).place(relx=0.15, rely=0.57, anchor='center')
         Label(frame, image=tank_right_img).place(relx=0.85, rely=0.57, anchor='center')
     except Exception as e:
@@ -59,13 +63,6 @@ def controls_screen(mode):
     #d previous frame
     for widget in root.winfo_children():
         widget.destroy()
-
-    ### Claude code für problem bei rückgehen von menu nach spiel
-    #siehe Kommentar in mode_menu() -- verhindert, dass ein verzoegert
-    #aufgeraeumtes altes Spielbild ein gerade erst erstelltes Bild hier
-    #ungueltig macht und die Funktion mitten in der Erstellung abbricht
-    gc.collect()
-    ### Claude code für problem bei rückgehen von menu nach spiel
 
     frame=Frame(root, bd=0)
     frame.place(relx=0, rely=0, relwidth=1.0, relheight=1.0)
@@ -99,16 +96,10 @@ def controls_screen(mode):
         lbl_body=Label(box, text=controls_text, font=('Calibri', 11), justify=LEFT)
         lbl_body.pack(padx=10, anchor='w')
 
-        ### Claude code für problem bei rückgehen von menu nach spiel
-        #pics: einzeln abgesichert, damit ein kaputtes Bild nicht die
-        #restliche Screen-Erstellung (Continue-Button!) mitreisst
-        try:
-            if title_text == 'Controls Player 1': Label(box, image=tank_p1_img).pack(pady=(25, 0))
-            elif title_text == 'Controls Player 2': Label(box, image=tank_p2_img).pack(pady=(25, 0))
-            elif title_text == 'Controls Player 3': Label(box, image=tank_p3_img).pack(pady=(25, 0))
-        except Exception as e:
-            print(f"Image load note: {e}")
-        ### Claude code für problem bei rückgehen von menu nach spiel
+        #pics:
+        if title_text == 'Controls Player 1': Label(box, image=tank_p1_img).pack(pady=(25, 0))
+        elif title_text == 'Controls Player 2': Label(box, image=tank_p2_img).pack(pady=(25, 0))
+        elif title_text == 'Controls Player 3': Label(box, image=tank_p3_img).pack(pady=(25, 0))
  
     #texts-based on prototyp design
     p1_text=(
@@ -146,12 +137,6 @@ def controls_screen(mode):
 def name_input_screen(mode):
     for widget in root.winfo_children():
         widget.destroy()
-
-    ### Claude code für problem bei rückgehen von menu nach spiel
-    #siehe Kommentar in mode_menu()
-    gc.collect()
-    ### Claude code für problem bei rückgehen von menu nach spiel
-
     frame=Frame(root, bd=0)
     frame.place(relx=0, rely=0, relwidth=1.0, relheight=1.0)
     label=Label(frame, text='Enter Player Names', fg='brown', font=('Calibri', 20, 'bold'))
@@ -168,13 +153,8 @@ def name_input_screen(mode):
         box.place(relx=x_pos, rely=0.18, relwidth=0.23, relheight=0.55)
         lbl_title=Label(box, text=title_text, font=('Calibri', 14, 'bold'))
         lbl_title.pack(pady=5)
-        ### Claude code für problem bei rückgehen von menu nach spiel
         if tank_img:
-            try:
-                Label(box, image=tank_img).pack(pady=(35, 10))
-            except Exception as e:
-                print(f"Image load note: {e}")
-        ### Claude code für problem bei rückgehen von menu nach spiel
+            Label(box, image=tank_img).pack(pady=(35, 10))
         lbl_desc=Label(box, text="Enter name here:", font=('Calibri', 11))
         lbl_desc.pack(pady=5)
         ent=Entry(box, font=('Calibri', 12), justify='center')
