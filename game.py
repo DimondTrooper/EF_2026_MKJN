@@ -7,6 +7,7 @@ import pygame
 from tkinter import Canvas
 from PIL import Image, ImageTk
 from build_tank_images import get_muzzle_flash_frames, get_tank_images
+from scoreboard import get_leaderboard, record_win, register_players
 from winner_screen import show_winner_screen
 import random
 
@@ -629,6 +630,16 @@ def check_hits(canvas, players, explosion_frames):
                     break
 
 
+def return_to_menu():
+    """
+    Macht: Kehrt zur Spielmodus-Auswahl des Menues zurueck.
+    Input: keine
+    Output: kein Rueckgabewert
+    """
+    import menu
+    menu.mode_menu()
+
+
 def run_game(root, mode, player_names=None):
     """
     Macht: Baut das Spielfeld auf (Hintergrund, Baeume, Spieler) und startet die Spiel-Loop.
@@ -639,6 +650,7 @@ def run_game(root, mode, player_names=None):
     player_count = 3 if mode == "1 vs 1 vs 1" else 2
     if not player_names or len(player_names) < player_count:
         player_names = [f"Spieler {n}" for n in range(1, player_count + 1)]
+    register_players(player_names)
     for widget in root.winfo_children():
         widget.destroy()
 
@@ -780,6 +792,8 @@ def run_game(root, mode, player_names=None):
                 idle_channel.fadeout(MOVE_SOUND_FADEOUT_MS)
             stop_ambient_sounds(ambient_state)
             winner_text = f"{alive_players[0]['name']} gewinnt!" if alive_players else "Unentschieden!"
+            if alive_players:
+                record_win(alive_players[0]["name"])
             for player_keys in PLAYER_KEYS.values():
                 root.unbind(f"<KeyPress-{player_keys['shoot']}>")
             root.unbind("<KeyPress>")
@@ -787,7 +801,9 @@ def run_game(root, mode, player_names=None):
             show_winner_screen(
                 root,
                 winner_text,
+                get_leaderboard(),
                 lambda: run_game(root, mode, player_names),
+                return_to_menu,
             )
             return
 

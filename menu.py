@@ -167,7 +167,7 @@ root.title('Tank Game')
 root.attributes('-fullscreen', True)
 root.bind('<Escape>', lambda e: root.attributes('-fullscreen', False))
 root.option_add('*Font', 'Calibri 12')
-root.option_add('*Background', 'white')
+root.option_add('*Background', '#f0f0f0')
 # start app on menufunct
 mode_menu()
 root.mainloop()
