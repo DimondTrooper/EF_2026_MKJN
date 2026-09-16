@@ -9,7 +9,7 @@ from PIL import Image, ImageTk
 from build_tank_images import get_tank_images
 import random
 
-BACKGROUND_PATH = "Assets/Map_real.png"
+BACKGROUND_PATH = "Assets/Map_Hintergrund.png"
 SHOOT_SOUND_PATH = "Sounds/Shoot.wav"
 MOVE_SOUND_PATH = "Sounds/Tank_moving.wav"
 MOVE_SOUND_FADEOUT_MS = 300
