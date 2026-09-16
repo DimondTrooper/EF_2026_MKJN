@@ -1,12 +1,21 @@
 from tkinter import *
 import game
+import gc
 import os
 
 def mode_menu():
     #clear old widgets->feels like switching
     for widget in root.winfo_children():
         widget.destroy()
- 
+
+    #nach einer Partie haengen sehr viele Panzer-/Explosionsbilder aus dem
+    #Spiel im zyklischen Garbage Collector; Tk vergibt Bildnamen fortlaufend
+    #und recycelt freigewordene Nummern. Ohne diesen expliziten Collect-Aufruf
+    #kann ein spaeter (verzoegert) aufgeraeumtes altes Spielbild zufaellig
+    #denselben Namen wie ein gerade frisch erstelltes Menue-Bild bekommen und
+    #es beim Aufraeumen aus Tk loeschen -> die dekorativen Panzer verschwinden.
+    gc.collect()
+
     frame=Frame(root, bd=0)
     frame.place(relx=0, rely=0, relwidth=1.0, relheight=1.0)
     #title,desc

@@ -58,6 +58,33 @@ def _center_on_square(img, size):
     return canvas
 
 
+def _build_angle_set(base_straight_path, base_diagonal_path, target_size=None):
+    """
+    Macht: Baut aus einem geraden und einem 45-Grad-Basisbild alle 8 Drehwinkel.
+    Input: base_straight_path, base_diagonal_path (Dateipfade zu den Basisbildern),
+           target_size (optional: erzwungene quadratische Endgroesse in Pixeln,
+           z.B. damit ein Wrack gleich gross wie die vorangehende Explosion wirkt)
+    Output: Dict {winkel: ImageTk.PhotoImage}
+    """
+    straight = _load_scaled(base_straight_path, rotated_45=False)
+    diagonal = _load_scaled(base_diagonal_path, rotated_45=True)
+
+    size = max(straight.width, straight.height, diagonal.width, diagonal.height) + 4
+    straight = _center_on_square(straight, size)
+    diagonal = _center_on_square(diagonal, size)
+
+    if target_size is not None and target_size != size:
+        straight = straight.resize((target_size, target_size), Image.LANCZOS)
+        diagonal = diagonal.resize((target_size, target_size), Image.LANCZOS)
+
+    images = {}
+    for step in (0, 90, 180, 270):
+        images[step] = ImageTk.PhotoImage(straight.rotate(step, expand=True))
+    for step in (0, 90, 180, 270):
+        images[(315 + step) % 360] = ImageTk.PhotoImage(diagonal.rotate(step, expand=True))
+    return images
+
+
 def get_tank_images(color="blue"):
     """
     Macht: Erzeugt alle 8 Drehwinkel-Bilder eines Panzers in der gewuenschten Farbe.
@@ -65,24 +92,26 @@ def get_tank_images(color="blue"):
     Output: Dict {winkel: ImageTk.PhotoImage}
     """
     base_straight, base_diagonal = TANK_BASE_PATHS[color]
-    straight = _load_scaled(base_straight, rotated_45=False)
-    diagonal = _load_scaled(base_diagonal, rotated_45=True)
+    return _build_angle_set(base_straight, base_diagonal)
 
-    size = max(straight.width, straight.height, diagonal.width, diagonal.height) + 4
-    straight = _center_on_square(straight, size)
-    diagonal = _center_on_square(diagonal, size)
 
-    tank_images = {}
+DESTROYED_TANK_BASE_PATHS = (
+    "Assets/Tank_Destroyed_animation/Tank_Destroyed_Straight.png",
+    "Assets/Tank_Destroyed_animation/Tank_Destroyed_Diagonal.png",
+)
 
-    for step in (0, 90, 180, 270):
-        rotated = straight.rotate(step, expand=True)
-        tank_images[step] = ImageTk.PhotoImage(rotated)
 
-    for step in (0, 90, 180, 270):
-        rotated = diagonal.rotate(step, expand=True)
-        tank_images[(315 + step) % 360] = ImageTk.PhotoImage(rotated)
-
-    return tank_images
+def get_destroyed_tank_images(target_size=None):
+    """
+    Macht: Erzeugt alle 8 Drehwinkel-Bilder des liegenbleibenden Panzer-Wracks
+           (dasselbe Wrack-Bild fuer alle Farben).
+    Input: target_size (optional: erzwungene quadratische Endgroesse in Pixeln,
+           damit das Wrack beim Erscheinen gleich gross wirkt wie die
+           vorangehende Explosion und nicht ploetzlich kleiner wird)
+    Output: Dict {winkel: ImageTk.PhotoImage}
+    """
+    base_straight, base_diagonal = DESTROYED_TANK_BASE_PATHS
+    return _build_angle_set(base_straight, base_diagonal, target_size=target_size)
 
 
 def _muzzle_flash_path(color, orientation, frame_number):
