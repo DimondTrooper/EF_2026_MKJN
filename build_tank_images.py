@@ -1,4 +1,5 @@
 import math
+import os
 
 from PIL import Image, ImageTk
 
@@ -7,6 +8,9 @@ TANK_BASE_PATHS = {
     "red": ("Assets/Tank_Red_Straight.png", "Assets/Tank_Red_Diagonal.png"),
     "green": ("Assets/Tank_Green_Straight.png", "Assets/Tank_Green_Diagonal.png"),
 }
+
+MUZZLE_FLASH_DIR = "Assets/Tank_Shoot_animation"
+MUZZLE_FLASH_FRAME_COUNT = 3
 
 HULL_PX = 44
 
@@ -79,6 +83,69 @@ def get_tank_images(color="blue"):
         tank_images[(315 + step) % 360] = ImageTk.PhotoImage(rotated)
 
     return tank_images
+
+
+def _muzzle_flash_path(color, orientation, frame_number):
+    return f"{MUZZLE_FLASH_DIR}/Tank_{color.capitalize()}_{orientation}_Mussleflash{frame_number}.png"
+
+
+def _resolve_muzzle_flash_path(color, orientation, frame_number):
+    """
+    Macht: Findet den Pfad zu einem Muendungsfeuer-Frame; fehlt genau dieser
+           Frame (z.B. Tank_Red_Diagonal_Mussleflash2.png), wird ersatzweise
+           der naechstliegende vorhandene Frame verwendet.
+    Input: color, orientation ("Straight"/"Diagonal"), frame_number (1..3)
+    Output: Dateipfad (String)
+    """
+    path = _muzzle_flash_path(color, orientation, frame_number)
+    if os.path.exists(path):
+        return path
+    for fallback_number in (2, 1, 3):
+        fallback_path = _muzzle_flash_path(color, orientation, fallback_number)
+        if os.path.exists(fallback_path):
+            return fallback_path
+    raise FileNotFoundError(f"Kein Muendungsfeuer-Bild fuer {color}/{orientation} gefunden")
+
+
+def get_muzzle_flash_frames(color="blue"):
+    """
+    Macht: Erzeugt fuer jeden der 8 Drehwinkel die 3 Muendungsfeuer-Frames
+           (kompletter Panzer inkl. Feuer am Rohr), im selben Massstab wie
+           die normalen Panzerbilder von get_tank_images().
+    Input: color (Panzerfarbe, z.B. "blue", "red", "green")
+    Output: Dict {winkel: Liste von MUZZLE_FLASH_FRAME_COUNT ImageTk.PhotoImage}
+    """
+    base_straight, base_diagonal = TANK_BASE_PATHS[color]
+    straight_bases = [
+        _load_scaled(_resolve_muzzle_flash_path(color, "Straight", n), rotated_45=False)
+        for n in range(1, MUZZLE_FLASH_FRAME_COUNT + 1)
+    ]
+    diagonal_bases = [
+        _load_scaled(_resolve_muzzle_flash_path(color, "Diagonal", n), rotated_45=True)
+        for n in range(1, MUZZLE_FLASH_FRAME_COUNT + 1)
+    ]
+
+    normal_straight = _load_scaled(base_straight, rotated_45=False)
+    normal_diagonal = _load_scaled(base_diagonal, rotated_45=True)
+    size = max(
+        normal_straight.width, normal_straight.height,
+        normal_diagonal.width, normal_diagonal.height,
+        *(max(frame.width, frame.height) for frame in straight_bases + diagonal_bases),
+    ) + 4
+    straight_bases = [_center_on_square(frame, size) for frame in straight_bases]
+    diagonal_bases = [_center_on_square(frame, size) for frame in diagonal_bases]
+
+    frames_by_angle = {}
+    for step in (0, 90, 180, 270):
+        frames_by_angle[step] = [
+            ImageTk.PhotoImage(base.rotate(step, expand=True)) for base in straight_bases
+        ]
+    for step in (0, 90, 180, 270):
+        frames_by_angle[(315 + step) % 360] = [
+            ImageTk.PhotoImage(base.rotate(step, expand=True)) for base in diagonal_bases
+        ]
+
+    return frames_by_angle
 
 
 if __name__ == "__main__":
