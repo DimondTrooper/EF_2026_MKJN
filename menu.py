@@ -1,7 +1,7 @@
 from tkinter import *
 from tkinter import messagebox
 import game
-import winsound
+import os
  
 def mode_menu():
     #clear old widgets->feels like switching
@@ -19,7 +19,6 @@ def mode_menu():
     #-DECORATIVE SIDE TANKS-
     global tank_left_img, tank_right_img
     try:
-        import os
         script_dir = os.path.dirname(os.path.abspath(__file__))
         
         green_path = os.path.join(script_dir, 'Assets', 'Tank_Green_Homescreen.png')
@@ -106,6 +105,29 @@ def controls_screen(mode):
     #play btn
     btn_play = Button(frame, text='Play', bg='orange', font=('Calibri', 14, 'bold'), command=lambda: game.run_game(root, mode))
     btn_play.place(relx=0.36, rely=0.75, relwidth=0.27, relheight=0.1)
+
+    lbl_body = Label(box, text=controls_text, font=('Calibri', 11), justify=LEFT)
+    lbl_body.pack(padx=10, anchor='w')
+
+    # ai created funct
+    try:
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            tank_path = os.path.join(script_dir, 'Assets', tank_filename)
+            raw_tank = PhotoImage(file=tank_path)
+            scaled_tank = raw_tank.subsample(6, 6) 
+            if '1' in title_text:
+                global p1_tank_img
+                p1_tank_img = scaled_tank
+            elif '2' in title_text:
+                global p2_tank_img
+                p2_tank_img = scaled_tank
+            else:
+                global p3_tank_img
+                p3_tank_img = scaled_tank
+            Label(box, image=scaled_tank).pack(pady=10)
+    except Exception as e:
+            print(f"Tank image error: {e}")
+    # ---------------------------------
  
 root = Tk()
 root.title('Tank Game')
