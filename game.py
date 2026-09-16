@@ -6,7 +6,7 @@ import time
 import pygame
 from tkinter import Canvas
 from PIL import Image, ImageTk
-from build_tank_images import get_muzzle_flash_frames, get_tank_images
+from build_tank_images import get_destroyed_tank_images, get_muzzle_flash_frames, get_tank_images
 from scoreboard import get_leaderboard, record_win, register_players
 from winner_screen import show_winner_screen
 import random
@@ -54,6 +54,8 @@ EXPLOSION_FRAME_DIR = "Assets/Tank_Explosion_Defeat"
 EXPLOSION_FRAME_COUNT = 4
 EXPLOSION_FRAME_MS = 80
 EXPLOSION_DISPLAY_SIZE = 110
+WIN_SCREEN_DELAY_MS = 3000  # Pause nach Explosion/Wrack, bevor das Leaderboard erscheint
+WRECK_HITBOX_SCALE = 0.5  # Wracks geben Deckung und blockieren wie Panzer/Baeume
 
 pygame.mixer.init()
 pygame.mixer.set_num_channels(16)
@@ -357,6 +359,7 @@ def create_player(root, canvas, name, keys, tank_images, muzzle_flash_frames, st
         "projectiles": [],
         "shoot_animation": None,
         "explosion": None,
+        "wreck": None,
     }
 
     def on_shoot(event):
@@ -471,15 +474,16 @@ def update_rotation(canvas, player, turn_left, turn_right):
     player["tank_height"] = player["tank_images"][state["angle"]].height()
 
 
-def move_tank(canvas, player, forward, backward, width, height, obstacles, other_players, mines, explosion_frames):
+def move_tank(canvas, player, forward, backward, width, height, obstacles, other_players, mines, explosion_frames, wrecks):
     """
     Macht: Bewegt den Panzer in (bei Rueckwaertsfahrt: entgegen) seiner
-           aktuellen Blickrichtung, sofern die Zielposition frei von Baeumen
-           und anderen (lebenden) Panzern ist. Faehrt der Panzer auf eine
-           Mine, stirbt er und die Mine wird entfernt.
+           aktuellen Blickrichtung, sofern die Zielposition frei von Baeumen,
+           Wracks und anderen (lebenden) Panzern ist. Faehrt der Panzer auf
+           eine Mine, stirbt er und die Mine wird entfernt.
     Input: canvas, player, forward, backward (Bool), width, height (Spielfeldgroesse),
            obstacles (Liste von Baeumen), other_players (Liste der uebrigen Spieler),
-           mines (Liste der Minen), explosion_frames (Liste von Explosionsbildern)
+           mines (Liste der Minen), explosion_frames (Liste von Explosionsbildern),
+           wrecks (Liste zerstoerter Panzer, die Deckung geben)
     Output: kein Rueckgabewert
     """
     player["moving"] = False
@@ -502,12 +506,16 @@ def move_tank(canvas, player, forward, backward, width, height, obstacles, other
         circles_overlap(new_x, new_y, new_radius, tree["cx"], tree["cy"], tree["radius"])
         for tree in obstacles
     )
+    blocked_by_wreck = any(
+        circles_overlap(new_x, new_y, new_radius, wreck["cx"], wreck["cy"], wreck["radius"])
+        for wreck in wrecks
+    )
     blocked_by_tank = any(
         circles_overlap(new_x, new_y, new_radius, *tank_hit_circle(canvas, other))
         for other in other_players
         if other["alive"]
     )
-    if blocked_by_tree or blocked_by_tank:
+    if blocked_by_tree or blocked_by_wreck or blocked_by_tank:
         return
 
     canvas.move(player["tank"], new_x - x, new_y - y)
@@ -524,12 +532,13 @@ def move_tank(canvas, player, forward, backward, width, height, obstacles, other
         destroy_player(canvas, player, explosion_frames)
 
 
-def update_projectiles(canvas, player, obstacles, trunk_photo, width, height):
+def update_projectiles(canvas, player, obstacles, trunk_photo, width, height, wrecks):
     """
     Macht: Bewegt die Projektile eines Spielers weiter und entfernt sie bei
-           Baum-Treffer oder beim Verlassen des Spielfelds.
+           Baum-Treffer, Wrack-Treffer (Deckung) oder beim Verlassen des
+           Spielfelds. Ein Wrack wird dabei nicht zerstoert, nur der Schuss.
     Input: canvas, player, obstacles (Baeume), trunk_photo (Stumpf-Bild),
-           width, height (Spielfeldgroesse)
+           width, height (Spielfeldgroesse), wrecks (Liste zerstoerter Panzer)
     Output: kein Rueckgabewert
     """
     for p in player["projectiles"][:]:
@@ -545,8 +554,12 @@ def update_projectiles(canvas, player, obstacles, trunk_photo, width, height):
             canvas.itemconfig(hit_tree["id"], image=trunk_photo)
             obstacles.remove(hit_tree)
 
+        hit_wreck = any(
+            circle_rect_overlap(wreck["cx"], wreck["cy"], wreck["radius"], bullet_box) for wreck in wrecks
+        )
+
         left_field = x2 < 0 or x1 > width or y2 < 0 or y1 > height
-        if left_field or hit_tree is not None:
+        if left_field or hit_tree is not None or hit_wreck:
             canvas.delete(p["id"])
             player["projectiles"].remove(p)
 
@@ -569,10 +582,13 @@ def update_shoot_animations(canvas, player):
     show_tank_image(canvas, player)
 
 
-def update_explosion(canvas, player, explosion_frames):
+def update_explosion(canvas, player, explosion_frames, wrecks):
     """
-    Macht: Zeigt den naechsten Explosionsframe und entfernt die Explosion nach dem letzten Frame.
-    Input: canvas, player (Spieler-Dict), explosion_frames (Liste von Explosionsbildern)
+    Macht: Zeigt den naechsten Explosionsframe. Nach dem letzten Frame wird die
+           Explosion durch ein liegenbleibendes Panzer-Wrack ersetzt, das ab
+           sofort als Deckung wirkt (blockiert Panzer und Projektile).
+    Input: canvas, player (Spieler-Dict), explosion_frames (Liste von Explosionsbildern),
+           wrecks (Liste, in die das neue Wrack eingetragen wird)
     Output: kein Rueckgabewert
     """
     explosion = player["explosion"]
@@ -580,23 +596,31 @@ def update_explosion(canvas, player, explosion_frames):
         return
     explosion["frame"] += 1
     if explosion["frame"] >= len(explosion_frames):
+        x, y = canvas.coords(explosion["id"])
         canvas.delete(explosion["id"])
+        wreck_image = canvas.destroyed_tank_images[player["state"]["angle"]]
+        wreck_id = canvas.create_image(x, y, image=wreck_image)
+        player["wreck"] = wreck_id
+        box = canvas.bbox(wreck_id)
+        radius = min(box[2] - box[0], box[3] - box[1]) / 2 * WRECK_HITBOX_SCALE
+        wrecks.append({"id": wreck_id, "cx": x, "cy": y, "radius": radius})
         player["explosion"] = None
         return
     canvas.itemconfig(explosion["id"], image=explosion_frames[explosion["frame"]])
     explosion["next_frame_time"] = time.time() + EXPLOSION_FRAME_MS / 1000
 
 
-def update_player(canvas, player, keys_pressed, width, height, obstacles, trunk_photo, other_players, mines, explosion_frames):
+def update_player(canvas, player, keys_pressed, width, height, obstacles, trunk_photo, other_players, mines, explosion_frames, wrecks):
     """
     Macht: Aktualisiert einen Spieler fuer einen Frame (Drehung, Bewegung, Projektile).
     Input: canvas, player, keys_pressed, width, height (Spielfeldgroesse),
            obstacles (Baeume), trunk_photo (Stumpf-Bild), other_players (uebrige Spieler),
-           mines (Liste der Minen), explosion_frames (Liste von Explosionsbildern)
+           mines (Liste der Minen), explosion_frames (Liste von Explosionsbildern),
+           wrecks (Liste zerstoerter Panzer, die Deckung geben)
     Output: kein Rueckgabewert
     """
     update_shoot_animations(canvas, player)
-    update_explosion(canvas, player, explosion_frames)
+    update_explosion(canvas, player, explosion_frames, wrecks)
 
     if not player["alive"]:
         player["moving"] = False
@@ -604,8 +628,8 @@ def update_player(canvas, player, keys_pressed, width, height, obstacles, trunk_
 
     forward, backward, turn_left, turn_right = read_movement_keys(player["keys"], keys_pressed)
     update_rotation(canvas, player, turn_left, turn_right)
-    move_tank(canvas, player, forward, backward, width, height, obstacles, other_players, mines, explosion_frames)
-    update_projectiles(canvas, player, obstacles, trunk_photo, width, height)
+    move_tank(canvas, player, forward, backward, width, height, obstacles, other_players, mines, explosion_frames, wrecks)
+    update_projectiles(canvas, player, obstacles, trunk_photo, width, height, wrecks)
 
 
 def check_hits(canvas, players, explosion_frames):
@@ -680,6 +704,7 @@ def run_game(root, mode, player_names=None):
     }
     explosion_frames = load_explosion_frames()
     canvas.explosion_frames = explosion_frames
+    canvas.destroyed_tank_images = get_destroyed_tank_images(target_size=EXPLOSION_DISPLAY_SIZE)
 
     tank_half_w = tank_images_by_player[1][0].width() // 2
     tank_half_h = tank_images_by_player[1][0].height() // 2
@@ -696,6 +721,8 @@ def run_game(root, mode, player_names=None):
         for mine in mines
     ]
     spawn_avoid_boxes = tree_boxes + mine_boxes
+
+    wrecks = []
 
     placed_spawns = []
 
@@ -769,7 +796,7 @@ def run_game(root, mode, player_names=None):
             other_players = [p for p in players if p is not player]
             update_player(
                 canvas, player, keys_pressed, WIDTH, HEIGHT, obstacle_boxes,
-                trunk_photo, other_players, mines, explosion_frames,
+                trunk_photo, other_players, mines, explosion_frames, wrecks,
             )
 
         any_moving = any(p["moving"] for p in players)
@@ -798,13 +825,22 @@ def run_game(root, mode, player_names=None):
                 root.unbind(f"<KeyPress-{player_keys['shoot']}>")
             root.unbind("<KeyPress>")
             root.unbind("<KeyRelease>")
-            show_winner_screen(
-                root,
-                winner_text,
-                get_leaderboard(),
-                lambda: run_game(root, mode, player_names),
-                return_to_menu,
-            )
+
+            def show_screen():
+                """
+                Macht: Zeigt nach der Pause das Leaderboard/Gewinner-Fenster an.
+                Input: keine
+                Output: kein Rueckgabewert
+                """
+                show_winner_screen(
+                    root,
+                    winner_text,
+                    get_leaderboard(),
+                    lambda: run_game(root, mode, player_names),
+                    return_to_menu,
+                )
+
+            root.after(WIN_SCREEN_DELAY_MS, show_screen)
             return
 
         root.after(DELAY, game_loop)
