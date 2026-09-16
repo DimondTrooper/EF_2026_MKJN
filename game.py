@@ -6,7 +6,8 @@ import time
 import pygame
 from tkinter import Canvas
 from PIL import Image, ImageTk
-from build_tank_images import get_tank_images
+from build_tank_images import get_muzzle_flash_frames, get_tank_images
+from winner_screen import show_winner_screen
 import random
 
 BACKGROUND_PATH = "Assets/Map_Hintergrund.png"
@@ -32,25 +33,24 @@ MINE_COUNT = 6
 MINE_DISPLAY_SIZE = 30
 MINE_HITBOX_SCALE = 0.8
 
-# Platzhalter-Frames -- spaeter durch die echten 3 Schuss-Animationsbilder ersetzen
-SHOOT_ANIMATION_PATHS = ["Assets/Shoot_1.png", "Assets/Shoot_2.png", "Assets/Shoot_3.png"]
-SHOOT_ANIMATION_SIZE = 40
 SHOOT_ANIMATION_FRAME_MS = 60
+EXPLOSION_FRAME_DIR = "Assets/Tank_Explosion_Defeat"
+EXPLOSION_FRAME_COUNT = 4
+EXPLOSION_FRAME_MS = 80
+EXPLOSION_DISPLAY_SIZE = 110
 
 pygame.mixer.init()
 SHOOT_SOUND = pygame.mixer.Sound(SHOOT_SOUND_PATH)
 MOVE_SOUND = pygame.mixer.Sound(MOVE_SOUND_PATH)
 
-SPEED = 1.5
+SPEED = 1
 FPS = 60
 DELAY = int(1000 / FPS)
 
-ROTATE_COOLDOWN = 0.12
+ROTATE_COOLDOWN = 0.35  # Zeit (Sekunden) pro 45-Grad-Drehschritt, solange Drehen gehalten wird
 
 SPAWN_MARGIN = 60
 MIN_PLAYER_SPAWN_DISTANCE = 200
-
-ROTATE_RESTART_COOLDOWN = 0.15
 
 SHOOT_COOLDOWN = 4
 PROJECTILE_SPEED = 8
@@ -59,25 +59,18 @@ BARREL_OFFSET = 20
 
 ANGLE_STEPS = [0, 45, 90, 135, 180, 225, 270, 315]
 
-DIRECTION_TO_ANGLE = {
-    (True, False, False, False): 0,
-    (True, False, False, True): 315,
-    (False, False, False, True): 270,
-    (False, True, False, True): 225,
-    (False, True, False, False): 180,
-    (False, True, True, False): 135,
-    (False, False, True, False): 90,
-    (True, False, True, False): 45,
-}
+# Normierte Richtungsvektoren (Laenge 1) -- dadurch ist die Fahrgeschwindigkeit
+# in jede Blickrichtung gleich schnell, auch diagonal.
+_DIAG = 0.7071067811865476  # 1/sqrt(2)
 ANGLE_TO_VECTOR = {
     0:   (0, -1),
-    45:  (-1, -1),
+    45:  (-_DIAG, -_DIAG),
     90:  (-1, 0),
-    135: (-1, 1),
+    135: (-_DIAG, _DIAG),
     180: (0, 1),
-    225: (1, 1),
+    225: (_DIAG, _DIAG),
     270: (1, 0),
-    315: (1, -1),
+    315: (_DIAG, -_DIAG),
 }
 
 PLAYER_KEYS = {
@@ -143,13 +136,25 @@ def load_image_scaled_to(path, target_size):
     return ImageTk.PhotoImage(img.resize(new_size))
 
 
-def load_shoot_animation_frames():
+def load_explosion_frames():
     """
-    Macht: Laedt die 3 Schuss-Animationsbilder und skaliert sie auf SHOOT_ANIMATION_SIZE.
+    Macht: Laedt die Explosionsframes und zentriert sie auf einer gleich grossen Bildflaeche.
     Input: keine
-    Output: Liste von 3 ImageTk.PhotoImage
+    Output: Liste von ImageTk.PhotoImage
     """
-    return [load_image_scaled_to(path, SHOOT_ANIMATION_SIZE) for path in SHOOT_ANIMATION_PATHS]
+    source_frames = [
+        Image.open(f"{EXPLOSION_FRAME_DIR}/Explosion_{number}.png").convert("RGBA")
+        for number in range(1, EXPLOSION_FRAME_COUNT + 1)
+    ]
+    scale = EXPLOSION_DISPLAY_SIZE / max(max(frame.width, frame.height) for frame in source_frames)
+    frames = []
+    for frame in source_frames:
+        resized = frame.resize((round(frame.width * scale), round(frame.height * scale)), Image.LANCZOS)
+        centered = Image.new("RGBA", (EXPLOSION_DISPLAY_SIZE, EXPLOSION_DISPLAY_SIZE), (0, 0, 0, 0))
+        offset = ((EXPLOSION_DISPLAY_SIZE - resized.width) // 2, (EXPLOSION_DISPLAY_SIZE - resized.height) // 2)
+        centered.paste(resized, offset, resized)
+        frames.append(ImageTk.PhotoImage(centered))
+    return frames
 
 
 def load_mine_photo():
@@ -238,24 +243,6 @@ def spawn_obstacles(canvas, width, height, tree_photos):
     return obstacles
 
 
-def next_step_towards(current, target):
-    """
-    Macht: Ermittelt den naechsten Drehschritt auf dem kuerzesten Weg zum Zielwinkel.
-    Input: current, target (Winkel aus ANGLE_STEPS)
-    Output: naechster Winkel aus ANGLE_STEPS
-    """
-    if current == target:
-        return current
-    i_current = ANGLE_STEPS.index(current)
-    i_target = ANGLE_STEPS.index(target)
-    n = len(ANGLE_STEPS)
-    forward_dist = (i_target - i_current) % n
-    backward_dist = (i_current - i_target) % n
-    if forward_dist <= backward_dist:
-        return ANGLE_STEPS[(i_current + 1) % n]
-    return ANGLE_STEPS[(i_current - 1) % n]
-
-
 def rects_overlap(a, b):
     """
     Macht: Prueft, ob sich zwei Rechtecke ueberschneiden.
@@ -267,19 +254,27 @@ def rects_overlap(a, b):
     return not (ax2 < bx1 or ax1 > bx2 or ay2 < by1 or ay1 > by2)
 
 
-def create_player(root, canvas, name, keys, tank_images, start_x, start_y, shoot_frames):
+def create_player(root, canvas, name, keys, tank_images, muzzle_flash_frames, start_x, start_y):
     """
     Macht: Erstellt einen neuen Spieler samt Panzer-Bild und Schuss-Tastenbindung.
     Input: root (Tk-Fenster), canvas, name (Spielername), keys (Tastenbelegung),
-           tank_images (Dict mit Panzerbildern), start_x, start_y (Startposition),
-           shoot_frames (Liste der 3 Schuss-Animationsbilder)
+           tank_images (Dict mit Panzerbildern), muzzle_flash_frames (Dict mit Schussbildern),
+           start_x, start_y (Startposition)
     Output: player (Dict mit allen Spielerdaten)
     """
 
     tank = canvas.create_image(start_x, start_y, image=tank_images[0])
+    name_tag = canvas.create_text(
+        start_x,
+        start_y - tank_images[0].height() // 2 - 12,
+        text=name,
+        fill="white",
+        font=("Calibri", 12, "bold"),
+    )
 
     player = {
         "tank": tank,
+        "name_tag": name_tag,
         "name": name,
         "alive": True,
         "moving": False,
@@ -287,16 +282,15 @@ def create_player(root, canvas, name, keys, tank_images, start_x, start_y, shoot
         "tank_width": tank_images[0].width(),
         "tank_height": tank_images[0].height(),
         "keys": keys,
-        "shoot_frames": shoot_frames,
+        "muzzle_flash_frames": muzzle_flash_frames,
         "state": {
             "angle": 0,
-            "target_angle": 0,
             "last_rotate_time": 0,
-            "rotation_ready_time": 0,
             "last_shot_time": 0,
         },
         "projectiles": [],
-        "shoot_animations": [],
+        "shoot_animation": None,
+        "explosion": None,
     }
 
     def on_shoot(event):
@@ -326,87 +320,110 @@ def create_player(root, canvas, name, keys, tank_images, start_x, start_y, shoot
         player["projectiles"].append({"id": bullet, "dx": dx, "dy": dy})
         SHOOT_SOUND.play()
 
-        anim_id = canvas.create_image(start_bx, start_by, image=shoot_frames[0])
-        player["shoot_animations"].append({
-            "id": anim_id,
+        player["shoot_animation"] = {
             "frame": 0,
             "next_frame_time": now + SHOOT_ANIMATION_FRAME_MS / 1000,
-        })
+        }
+        show_tank_image(canvas, player)
 
     root.bind(f"<KeyPress-{keys['shoot']}>", on_shoot)
 
     return player
 
 
-def read_movement_keys(keys, keys_pressed):
+def show_tank_image(canvas, player):
     """
-    Macht: Liest die Bewegungstasten eines Spielers aus und berechnet das Bewegungsdelta.
-    Input: keys (Tastenbelegung eines Spielers), keys_pressed (Menge aktuell gedrueckter Tasten)
-    Output: (up, down, left, right, dx, dy)
-    """
-    up = keys["up"] in keys_pressed
-    down = keys["down"] in keys_pressed
-    left = keys["left"] in keys_pressed
-    right = keys["right"] in keys_pressed
-
-    dx = dy = 0
-    if up:
-        dy -= SPEED
-    if down:
-        dy += SPEED
-    if left:
-        dx -= SPEED
-    if right:
-        dx += SPEED
-
-    return up, down, left, right, dx, dy
-
-
-def update_rotation(canvas, player, up, down, left, right):
-    """
-    Macht: Aktualisiert Zielwinkel und tatsaechlichen Drehwinkel des Panzers.
-    Input: canvas, player (Spieler-Dict), up, down, left, right (Bool, Bewegungstasten)
+    Macht: Zeigt das normale Panzerbild oder den aktuellen Schuss-Animationsframe.
+    Input: canvas, player (Spieler-Dict)
     Output: kein Rueckgabewert
     """
-    state = player["state"]
-    key = (up, down, left, right)
-    now = time.time()
+    angle = player["state"]["angle"]
+    animation = player["shoot_animation"]
+    if animation is None:
+        image = player["tank_images"][angle]
+    else:
+        image = player["muzzle_flash_frames"][angle][animation["frame"]]
+    canvas.itemconfig(player["tank"], image=image)
 
-    if (
-        key in DIRECTION_TO_ANGLE
-        and state["angle"] == state["target_angle"]
-        and now >= state["rotation_ready_time"]
-    ):
-        state["target_angle"] = DIRECTION_TO_ANGLE[key]
 
-    if state["angle"] == state["target_angle"]:
+def destroy_player(canvas, player, explosion_frames):
+    """
+    Macht: Entfernt einen Panzer und startet seine Explosionsanimation an derselben Position.
+    Input: canvas, player (Spieler-Dict), explosion_frames (Liste von Explosionsbildern)
+    Output: kein Rueckgabewert
+    """
+    if not player["alive"]:
         return
+    x, y = canvas.coords(player["tank"])
+    canvas.delete(player["tank"])
+    canvas.delete(player["name_tag"])
+    explosion_id = canvas.create_image(x, y, image=explosion_frames[0])
+    player["alive"] = False
+    player["moving"] = False
+    player["shoot_animation"] = None
+    player["explosion"] = {
+        "id": explosion_id,
+        "frame": 0,
+        "next_frame_time": time.time() + EXPLOSION_FRAME_MS / 1000,
+    }
+
+
+def read_movement_keys(keys, keys_pressed):
+    """
+    Macht: Liest die Panzersteuerung eines Spielers aus (vor/zurueck + drehen).
+    Input: keys (Tastenbelegung eines Spielers), keys_pressed (Menge aktuell gedrueckter Tasten)
+    Output: (forward, backward, turn_left, turn_right) -- alles Bool
+    """
+    forward = keys["up"] in keys_pressed
+    backward = keys["down"] in keys_pressed
+    turn_left = keys["left"] in keys_pressed
+    turn_right = keys["right"] in keys_pressed
+    return forward, backward, turn_left, turn_right
+
+
+def update_rotation(canvas, player, turn_left, turn_right):
+    """
+    Macht: Dreht den Panzer schrittweise (45 Grad pro ROTATE_COOLDOWN), solange
+           genau eine der beiden Drehtasten gehalten wird.
+    Input: canvas, player (Spieler-Dict), turn_left, turn_right (Bool)
+    Output: kein Rueckgabewert
+    """
+    if turn_left == turn_right:
+        return  # keine oder beide Tasten gedrueckt -> keine Drehung
+
+    state = player["state"]
+    now = time.time()
     if now - state["last_rotate_time"] < ROTATE_COOLDOWN:
         return
 
     state["last_rotate_time"] = now
-    state["angle"] = next_step_towards(state["angle"], state["target_angle"])
-    canvas.itemconfig(player["tank"], image=player["tank_images"][state["angle"]])
+    i_current = ANGLE_STEPS.index(state["angle"])
+    step = 1 if turn_left else -1
+    state["angle"] = ANGLE_STEPS[(i_current + step) % len(ANGLE_STEPS)]
+    show_tank_image(canvas, player)
     player["tank_width"] = player["tank_images"][state["angle"]].width()
     player["tank_height"] = player["tank_images"][state["angle"]].height()
-    if state["angle"] == state["target_angle"]:
-        state["rotation_ready_time"] = now + ROTATE_RESTART_COOLDOWN
 
 
-def move_tank(canvas, player, dx, dy, width, height, obstacles, other_players, mines):
+def move_tank(canvas, player, forward, backward, width, height, obstacles, other_players, mines, explosion_frames):
     """
-    Macht: Bewegt den Panzer, sofern die Zielposition frei von Baeumen und
-           anderen (lebenden) Panzern ist. Faehrt der Panzer auf eine Mine,
-           stirbt er und die Mine wird entfernt.
-    Input: canvas, player, dx, dy (Bewegungsdelta), width, height (Spielfeldgroesse),
+    Macht: Bewegt den Panzer in (bei Rueckwaertsfahrt: entgegen) seiner
+           aktuellen Blickrichtung, sofern die Zielposition frei von Baeumen
+           und anderen (lebenden) Panzern ist. Faehrt der Panzer auf eine
+           Mine, stirbt er und die Mine wird entfernt.
+    Input: canvas, player, forward, backward (Bool), width, height (Spielfeldgroesse),
            obstacles (Liste von Baeumen), other_players (Liste der uebrigen Spieler),
-           mines (Liste der Minen)
+           mines (Liste der Minen), explosion_frames (Liste von Explosionsbildern)
     Output: kein Rueckgabewert
     """
-    wants_to_move = dx != 0 or dy != 0
     player["moving"] = False
-    if not wants_to_move:
-        return
+    if forward == backward:
+        return  # keine oder beide Tasten gedrueckt -> keine Bewegung
+
+    vx, vy = ANGLE_TO_VECTOR[player["state"]["angle"]]
+    direction = 1 if forward else -1
+    dx = vx * SPEED * direction
+    dy = vy * SPEED * direction
 
     x, y = canvas.coords(player["tank"])
     half_w = player["tank_width"] // 2
@@ -428,6 +445,7 @@ def move_tank(canvas, player, dx, dy, width, height, obstacles, other_players, m
         return
 
     canvas.move(player["tank"], new_x - x, new_y - y)
+    canvas.move(player["name_tag"], new_x - x, new_y - y)
     player["moving"] = True
 
     hit_mine = next(
@@ -437,9 +455,7 @@ def move_tank(canvas, player, dx, dy, width, height, obstacles, other_players, m
     if hit_mine is not None:
         canvas.delete(hit_mine["id"])
         mines.remove(hit_mine)
-        canvas.delete(player["tank"])
-        player["alive"] = False
-        player["moving"] = False
+        destroy_player(canvas, player, explosion_frames)
 
 
 def update_projectiles(canvas, player, obstacles, trunk_photo, width, height):
@@ -471,50 +487,65 @@ def update_projectiles(canvas, player, obstacles, trunk_photo, width, height):
 
 def update_shoot_animations(canvas, player):
     """
-    Macht: Spielt fuer jeden aktiven Schuss die naechsten Animations-Frames ab
-           und entfernt die Animation, sobald der letzte Frame gezeigt wurde.
+    Macht: Spielt die Schuss-Animation eines Spielers ab und stellt danach das normale Panzerbild wieder her.
     Input: canvas, player
     Output: kein Rueckgabewert
     """
-    now = time.time()
-    for anim in player["shoot_animations"][:]:
-        if now < anim["next_frame_time"]:
-            continue
+    animation = player["shoot_animation"]
+    if animation is None or time.time() < animation["next_frame_time"]:
+        return
 
-        anim["frame"] += 1
-        if anim["frame"] >= len(player["shoot_frames"]):
-            canvas.delete(anim["id"])
-            player["shoot_animations"].remove(anim)
-            continue
-
-        canvas.itemconfig(anim["id"], image=player["shoot_frames"][anim["frame"]])
-        anim["next_frame_time"] = now + SHOOT_ANIMATION_FRAME_MS / 1000
+    animation["frame"] += 1
+    if animation["frame"] >= len(player["muzzle_flash_frames"][player["state"]["angle"]]):
+        player["shoot_animation"] = None
+    else:
+        animation["next_frame_time"] = time.time() + SHOOT_ANIMATION_FRAME_MS / 1000
+    show_tank_image(canvas, player)
 
 
-def update_player(canvas, player, keys_pressed, width, height, obstacles, trunk_photo, other_players, mines):
+def update_explosion(canvas, player, explosion_frames):
+    """
+    Macht: Zeigt den naechsten Explosionsframe und entfernt die Explosion nach dem letzten Frame.
+    Input: canvas, player (Spieler-Dict), explosion_frames (Liste von Explosionsbildern)
+    Output: kein Rueckgabewert
+    """
+    explosion = player["explosion"]
+    if explosion is None or time.time() < explosion["next_frame_time"]:
+        return
+    explosion["frame"] += 1
+    if explosion["frame"] >= len(explosion_frames):
+        canvas.delete(explosion["id"])
+        player["explosion"] = None
+        return
+    canvas.itemconfig(explosion["id"], image=explosion_frames[explosion["frame"]])
+    explosion["next_frame_time"] = time.time() + EXPLOSION_FRAME_MS / 1000
+
+
+def update_player(canvas, player, keys_pressed, width, height, obstacles, trunk_photo, other_players, mines, explosion_frames):
     """
     Macht: Aktualisiert einen Spieler fuer einen Frame (Drehung, Bewegung, Projektile).
     Input: canvas, player, keys_pressed, width, height (Spielfeldgroesse),
            obstacles (Baeume), trunk_photo (Stumpf-Bild), other_players (uebrige Spieler),
-           mines (Liste der Minen)
+           mines (Liste der Minen), explosion_frames (Liste von Explosionsbildern)
     Output: kein Rueckgabewert
     """
-    update_shoot_animations(canvas, player)  # auch nach dem Tod zu Ende abspielen
+    update_shoot_animations(canvas, player)
+    update_explosion(canvas, player, explosion_frames)
 
     if not player["alive"]:
         player["moving"] = False
         return
 
-    up, down, left, right, dx, dy = read_movement_keys(player["keys"], keys_pressed)
-    update_rotation(canvas, player, up, down, left, right)
-    move_tank(canvas, player, dx, dy, width, height, obstacles, other_players, mines)
+    forward, backward, turn_left, turn_right = read_movement_keys(player["keys"], keys_pressed)
+    update_rotation(canvas, player, turn_left, turn_right)
+    move_tank(canvas, player, forward, backward, width, height, obstacles, other_players, mines, explosion_frames)
     update_projectiles(canvas, player, obstacles, trunk_photo, width, height)
 
 
-def check_hits(canvas, players):
+def check_hits(canvas, players, explosion_frames):
     """
     Macht: Prueft fuer alle Spieler, ob ein Projektil einen gegnerischen Panzer trifft.
-    Input: canvas, players (Liste aller Spieler)
+    Input: canvas, players (Liste aller Spieler), explosion_frames (Liste von Explosionsbildern)
     Output: kein Rueckgabewert
     """
     for shooter in players:
@@ -527,8 +558,7 @@ def check_hits(canvas, players):
 
                 cx, cy, radius = tank_hit_circle(canvas, target)
                 if circle_rect_overlap(cx, cy, radius, bullet_box):
-                    target["alive"] = False
-                    canvas.delete(target["tank"])
+                    destroy_player(canvas, target, explosion_frames)
                     canvas.delete(p["id"])
                     shooter["projectiles"].remove(p)
                     break
@@ -568,6 +598,11 @@ def run_game(root, mode, player_names=None):
 
     player_numbers = [1, 2, 3] if mode == "1 vs 1 vs 1" else [1, 2]
     tank_images_by_player = {n: get_tank_images(PLAYER_COLORS[n]) for n in player_numbers}
+    muzzle_flash_frames_by_player = {
+        n: get_muzzle_flash_frames(PLAYER_COLORS[n]) for n in player_numbers
+    }
+    explosion_frames = load_explosion_frames()
+    canvas.explosion_frames = explosion_frames
 
     tank_half_w = tank_images_by_player[1][0].width() // 2
     tank_half_h = tank_images_by_player[1][0].height() // 2
@@ -584,9 +619,6 @@ def run_game(root, mode, player_names=None):
         for mine in mines
     ]
     spawn_avoid_boxes = tree_boxes + mine_boxes
-
-    shoot_frames = load_shoot_animation_frames()
-    canvas.shoot_frames = shoot_frames
 
     placed_spawns = []
 
@@ -611,13 +643,13 @@ def run_game(root, mode, player_names=None):
     spawn2_x, spawn2_y = random_tank_spawn()
 
     players = [
-        create_player(root, canvas, player_names[0], PLAYER_KEYS[1], tank_images_by_player[1], spawn1_x, spawn1_y, shoot_frames),
-        create_player(root, canvas, player_names[1], PLAYER_KEYS[2], tank_images_by_player[2], spawn2_x, spawn2_y, shoot_frames),
+        create_player(root, canvas, player_names[0], PLAYER_KEYS[1], tank_images_by_player[1], muzzle_flash_frames_by_player[1], spawn1_x, spawn1_y),
+        create_player(root, canvas, player_names[1], PLAYER_KEYS[2], tank_images_by_player[2], muzzle_flash_frames_by_player[2], spawn2_x, spawn2_y),
     ]
     if mode == "1 vs 1 vs 1":
         spawn3_x, spawn3_y = random_tank_spawn()
         players.append(
-            create_player(root, canvas, player_names[2], PLAYER_KEYS[3], tank_images_by_player[3], spawn3_x, spawn3_y, shoot_frames)
+            create_player(root, canvas, player_names[2], PLAYER_KEYS[3], tank_images_by_player[3], muzzle_flash_frames_by_player[3], spawn3_x, spawn3_y)
         )
 
     keys_pressed = set()
@@ -654,7 +686,10 @@ def run_game(root, mode, player_names=None):
 
         for player in players:
             other_players = [p for p in players if p is not player]
-            update_player(canvas, player, keys_pressed, WIDTH, HEIGHT, obstacle_boxes, trunk_photo, other_players, mines)
+            update_player(
+                canvas, player, keys_pressed, WIDTH, HEIGHT, obstacle_boxes,
+                trunk_photo, other_players, mines, explosion_frames,
+            )
 
         any_moving = any(p["moving"] for p in players)
         if any_moving and move_channel is None:
@@ -663,16 +698,24 @@ def run_game(root, mode, player_names=None):
             move_channel.fadeout(MOVE_SOUND_FADEOUT_MS)
             move_channel = None
 
-        check_hits(canvas, players)
+        check_hits(canvas, players, explosion_frames)
 
         alive_players = [p for p in players if p["alive"]]
         if len(alive_players) <= 1:
+            if any(player["explosion"] is not None for player in players):
+                root.after(DELAY, game_loop)
+                return
             if move_channel is not None:
                 move_channel.fadeout(MOVE_SOUND_FADEOUT_MS)
             winner_text = f"{alive_players[0]['name']} gewinnt!" if alive_players else "Unentschieden!"
-            canvas.create_text(
-                WIDTH // 2, HEIGHT // 2,
-                text=winner_text, fill="white", font=("Calibri", 32, "bold"),
+            for player_keys in PLAYER_KEYS.values():
+                root.unbind(f"<KeyPress-{player_keys['shoot']}>")
+            root.unbind("<KeyPress>")
+            root.unbind("<KeyRelease>")
+            show_winner_screen(
+                root,
+                winner_text,
+                lambda: run_game(root, mode, player_names),
             )
             return
 
