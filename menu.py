@@ -8,14 +8,6 @@ def mode_menu():
     for widget in root.winfo_children():
         widget.destroy()
 
-    #nach einer Partie haengen sehr viele Panzer-/Explosionsbilder aus dem
-    #Spiel im zyklischen Garbage Collector; Tk vergibt Bildnamen fortlaufend
-    #und recycelt freigewordene Nummern. Ohne diesen expliziten Collect-Aufruf
-    #kann ein spaeter (verzoegert) aufgeraeumtes altes Spielbild zufaellig
-    #denselben Namen wie ein gerade frisch erstelltes Menue-Bild bekommen und
-    #es beim Aufraeumen aus Tk loeschen -> die dekorativen Panzer verschwinden.
-    gc.collect()
-
     frame=Frame(root, bd=0)
     frame.place(relx=0, rely=0, relwidth=1.0, relheight=1.0)
     #title,desc
@@ -176,7 +168,7 @@ root.title('Tank Game')
 root.attributes('-fullscreen', True)
 root.bind('<Escape>', lambda e: root.attributes('-fullscreen', False))
 root.option_add('*Font', 'Calibri 12')
-root.option_add('*Background', '#f0f0f0')
+root.option_add('*Background','#f0f0f0')
 # start app on menufunct
 mode_menu()
 root.mainloop()
