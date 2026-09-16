@@ -22,6 +22,21 @@ TREE_HITBOX_SCALE = 0.85
 OBSTACLE_MIN_COUNT = 7
 OBSTACLE_MAX_COUNT = 15
 
+# Panzer-Bilder sind quadratisch (gleiche Groesse in jeder Drehstufe), aber
+# je nach Drehung ist der sichtbare Panzer rautenfoermig statt rechteckig --
+# eine runde Hitbox passt sich dem viel besser an als das volle Quadrat.
+TANK_HITBOX_SCALE = 0.5
+
+MINE_IMAGE_PATH = "Assets/Mine.png"
+MINE_COUNT = 6
+MINE_DISPLAY_SIZE = 30
+MINE_HITBOX_SCALE = 0.8
+
+# Platzhalter-Frames -- spaeter durch die echten 3 Schuss-Animationsbilder ersetzen
+SHOOT_ANIMATION_PATHS = ["Assets/Shoot_1.png", "Assets/Shoot_2.png", "Assets/Shoot_3.png"]
+SHOOT_ANIMATION_SIZE = 40
+SHOOT_ANIMATION_FRAME_MS = 60
+
 pygame.mixer.init()
 SHOOT_SOUND = pygame.mixer.Sound(SHOOT_SOUND_PATH)
 MOVE_SOUND = pygame.mixer.Sound(MOVE_SOUND_PATH)
@@ -36,6 +51,15 @@ SPAWN_MARGIN = 60
 MIN_PLAYER_SPAWN_DISTANCE = 200
 
 ROTATE_RESTART_COOLDOWN = 0.15
+
+# Ohne diese Bremse kann man durch staendiges Tastenwechseln beliebig lange
+# weiterdrehen (nur verlangsamt, nie gestoppt). Nach MAX_CONSECUTIVE_ROTATION_STEPS
+# Schritten am Stueck gibt es deshalb eine deutlich laengere Zwangspause. Bleibt
+# der Panzer laenger als SETTLE_RESET_TIME in eine Richtung stehen, gilt die
+# naechste Drehung wieder als frische Sequenz (Zaehler wird zurueckgesetzt).
+MAX_CONSECUTIVE_ROTATION_STEPS = 3
+ROTATION_LOCKOUT_DURATION = 1.0
+SETTLE_RESET_TIME = 0.5
 
 SHOOT_COOLDOWN = 4
 PROJECTILE_SPEED = 8
@@ -128,6 +152,46 @@ def load_image_scaled_to(path, target_size):
     return ImageTk.PhotoImage(img.resize(new_size))
 
 
+def load_shoot_animation_frames():
+    """
+    Macht: Laedt die 3 Schuss-Animationsbilder und skaliert sie auf SHOOT_ANIMATION_SIZE.
+    Input: keine
+    Output: Liste von 3 ImageTk.PhotoImage
+    """
+    return [load_image_scaled_to(path, SHOOT_ANIMATION_SIZE) for path in SHOOT_ANIMATION_PATHS]
+
+
+def load_mine_photo():
+    """
+    Macht: Laedt das Minen-Bild, schneidet es auf den sichtbaren Inhalt zu
+           und skaliert es auf MINE_DISPLAY_SIZE.
+    Input: keine
+    Output: ImageTk.PhotoImage
+    """
+    img = Image.open(MINE_IMAGE_PATH).convert("RGBA")
+    img = img.crop(img.getbbox())
+    scale = MINE_DISPLAY_SIZE / max(img.width, img.height)
+    new_size = (round(img.width * scale), round(img.height * scale))
+    return ImageTk.PhotoImage(img.resize(new_size))
+
+
+def spawn_mines(canvas, width, height, mine_photo, avoid_boxes):
+    """
+    Macht: Platziert MINE_COUNT Minen an zufaelligen Positionen, die keine
+           der avoid_boxes (z.B. Baeume) ueberlappen.
+    Input: canvas, width, height (Spielfeldgroesse), mine_photo (Minen-Bild),
+           avoid_boxes (Liste von Rechtecken, die gemieden werden)
+    Output: Liste von Minen-Dicts {"id", "cx", "cy", "radius"}
+    """
+    mine_half = MINE_DISPLAY_SIZE / 2
+    mines = []
+    for _ in range(MINE_COUNT):
+        x, y = random_spawn_position(width, height, avoid_boxes, mine_half, mine_half)
+        mine_id = canvas.create_image(x, y, image=mine_photo)
+        mines.append({"id": mine_id, "cx": x, "cy": y, "radius": mine_half * MINE_HITBOX_SCALE})
+    return mines
+
+
 def circle_rect_overlap(cx, cy, radius, rect):
     """
     Macht: Prueft, ob sich ein Kreis und ein Rechteck ueberschneiden.
@@ -140,6 +204,29 @@ def circle_rect_overlap(cx, cy, radius, rect):
     dx = cx - closest_x
     dy = cy - closest_y
     return (dx * dx + dy * dy) <= radius * radius
+
+
+def circles_overlap(cx1, cy1, r1, cx2, cy2, r2):
+    """
+    Macht: Prueft, ob sich zwei Kreise ueberschneiden.
+    Input: cx1, cy1, r1 (erster Kreis), cx2, cy2, r2 (zweiter Kreis)
+    Output: True oder False
+    """
+    dx = cx1 - cx2
+    dy = cy1 - cy2
+    combined_radius = r1 + r2
+    return (dx * dx + dy * dy) <= combined_radius * combined_radius
+
+
+def tank_hit_circle(canvas, player):
+    """
+    Macht: Ermittelt Mittelpunkt und Radius der runden Hitbox eines Panzers.
+    Input: canvas, player (Spieler-Dict)
+    Output: (cx, cy, radius)
+    """
+    x, y = canvas.coords(player["tank"])
+    radius = min(player["tank_width"], player["tank_height"]) / 2 * TANK_HITBOX_SCALE
+    return x, y, radius
 
 
 def spawn_obstacles(canvas, width, height, tree_photos):
@@ -189,11 +276,12 @@ def rects_overlap(a, b):
     return not (ax2 < bx1 or ax1 > bx2 or ay2 < by1 or ay1 > by2)
 
 
-def create_player(root, canvas, name, keys, tank_images, start_x, start_y):
+def create_player(root, canvas, name, keys, tank_images, start_x, start_y, shoot_frames):
     """
     Macht: Erstellt einen neuen Spieler samt Panzer-Bild und Schuss-Tastenbindung.
     Input: root (Tk-Fenster), canvas, name (Spielername), keys (Tastenbelegung),
-           tank_images (Dict mit Panzerbildern), start_x, start_y (Startposition)
+           tank_images (Dict mit Panzerbildern), start_x, start_y (Startposition),
+           shoot_frames (Liste der 3 Schuss-Animationsbilder)
     Output: player (Dict mit allen Spielerdaten)
     """
 
@@ -208,19 +296,24 @@ def create_player(root, canvas, name, keys, tank_images, start_x, start_y):
         "tank_width": tank_images[0].width(),
         "tank_height": tank_images[0].height(),
         "keys": keys,
+        "shoot_frames": shoot_frames,
         "state": {
             "angle": 0,
             "target_angle": 0,
             "last_rotate_time": 0,
             "rotation_ready_time": 0,
             "last_shot_time": 0,
+            "consecutive_rotation_steps": 0,
+            "last_rotation_complete_time": 0,
         },
         "projectiles": [],
+        "shoot_animations": [],
     }
 
     def on_shoot(event):
         """
-        Macht: Feuert einen Schuss ab, falls der Spieler lebt und der Cooldown abgelaufen ist.
+        Macht: Feuert einen Schuss ab, falls der Spieler lebt und der Cooldown abgelaufen ist,
+               und startet die Schuss-Animation am Rohrende.
         Input: event (Tkinter-Tastenereignis)
         Output: kein Rueckgabewert
         """
@@ -243,6 +336,13 @@ def create_player(root, canvas, name, keys, tank_images, start_x, start_y):
         )
         player["projectiles"].append({"id": bullet, "dx": dx, "dy": dy})
         SHOOT_SOUND.play()
+
+        anim_id = canvas.create_image(start_bx, start_by, image=shoot_frames[0])
+        player["shoot_animations"].append({
+            "id": anim_id,
+            "frame": 0,
+            "next_frame_time": now + SHOOT_ANIMATION_FRAME_MS / 1000,
+        })
 
     root.bind(f"<KeyPress-{keys['shoot']}>", on_shoot)
 
@@ -288,7 +388,11 @@ def update_rotation(canvas, player, up, down, left, right):
         and state["angle"] == state["target_angle"]
         and now >= state["rotation_ready_time"]
     ):
-        state["target_angle"] = DIRECTION_TO_ANGLE[key]
+        new_target = DIRECTION_TO_ANGLE[key]
+        if new_target != state["target_angle"]:
+            if now - state["last_rotation_complete_time"] >= SETTLE_RESET_TIME:
+                state["consecutive_rotation_steps"] = 0
+            state["target_angle"] = new_target
 
     if state["angle"] == state["target_angle"]:
         return
@@ -300,15 +404,25 @@ def update_rotation(canvas, player, up, down, left, right):
     canvas.itemconfig(player["tank"], image=player["tank_images"][state["angle"]])
     player["tank_width"] = player["tank_images"][state["angle"]].width()
     player["tank_height"] = player["tank_images"][state["angle"]].height()
+
     if state["angle"] == state["target_angle"]:
-        state["rotation_ready_time"] = now + ROTATE_RESTART_COOLDOWN
+        state["last_rotation_complete_time"] = now
+        state["consecutive_rotation_steps"] += 1
+        if state["consecutive_rotation_steps"] >= MAX_CONSECUTIVE_ROTATION_STEPS:
+            state["rotation_ready_time"] = now + ROTATION_LOCKOUT_DURATION
+            state["consecutive_rotation_steps"] = 0
+        else:
+            state["rotation_ready_time"] = now + ROTATE_RESTART_COOLDOWN
 
 
-def move_tank(canvas, player, dx, dy, width, height, obstacles):
+def move_tank(canvas, player, dx, dy, width, height, obstacles, other_players, mines):
     """
-    Macht: Bewegt den Panzer, sofern die Zielposition frei von Baeumen ist.
+    Macht: Bewegt den Panzer, sofern die Zielposition frei von Baeumen und
+           anderen (lebenden) Panzern ist. Faehrt der Panzer auf eine Mine,
+           stirbt er und die Mine wird entfernt.
     Input: canvas, player, dx, dy (Bewegungsdelta), width, height (Spielfeldgroesse),
-           obstacles (Liste von Baeumen)
+           obstacles (Liste von Baeumen), other_players (Liste der uebrigen Spieler),
+           mines (Liste der Minen)
     Output: kein Rueckgabewert
     """
     wants_to_move = dx != 0 or dy != 0
@@ -321,14 +435,33 @@ def move_tank(canvas, player, dx, dy, width, height, obstacles):
     half_h = player["tank_height"] // 2
     new_x = clamp(x + dx, half_w, width - half_w)
     new_y = clamp(y + dy, half_h, height - half_h)
-    new_box = (new_x - half_w, new_y - half_h, new_x + half_w, new_y + half_h)
+    new_radius = min(player["tank_width"], player["tank_height"]) / 2 * TANK_HITBOX_SCALE
 
-    blocked = any(circle_rect_overlap(tree["cx"], tree["cy"], tree["radius"], new_box) for tree in obstacles)
-    if blocked:
+    blocked_by_tree = any(
+        circles_overlap(new_x, new_y, new_radius, tree["cx"], tree["cy"], tree["radius"])
+        for tree in obstacles
+    )
+    blocked_by_tank = any(
+        circles_overlap(new_x, new_y, new_radius, *tank_hit_circle(canvas, other))
+        for other in other_players
+        if other["alive"]
+    )
+    if blocked_by_tree or blocked_by_tank:
         return
 
     canvas.move(player["tank"], new_x - x, new_y - y)
     player["moving"] = True
+
+    hit_mine = next(
+        (mine for mine in mines if circles_overlap(new_x, new_y, new_radius, mine["cx"], mine["cy"], mine["radius"])),
+        None,
+    )
+    if hit_mine is not None:
+        canvas.delete(hit_mine["id"])
+        mines.remove(hit_mine)
+        canvas.delete(player["tank"])
+        player["alive"] = False
+        player["moving"] = False
 
 
 def update_projectiles(canvas, player, obstacles, trunk_photo, width, height):
@@ -358,20 +491,45 @@ def update_projectiles(canvas, player, obstacles, trunk_photo, width, height):
             player["projectiles"].remove(p)
 
 
-def update_player(canvas, player, keys_pressed, width, height, obstacles, trunk_photo):
+def update_shoot_animations(canvas, player):
+    """
+    Macht: Spielt fuer jeden aktiven Schuss die naechsten Animations-Frames ab
+           und entfernt die Animation, sobald der letzte Frame gezeigt wurde.
+    Input: canvas, player
+    Output: kein Rueckgabewert
+    """
+    now = time.time()
+    for anim in player["shoot_animations"][:]:
+        if now < anim["next_frame_time"]:
+            continue
+
+        anim["frame"] += 1
+        if anim["frame"] >= len(player["shoot_frames"]):
+            canvas.delete(anim["id"])
+            player["shoot_animations"].remove(anim)
+            continue
+
+        canvas.itemconfig(anim["id"], image=player["shoot_frames"][anim["frame"]])
+        anim["next_frame_time"] = now + SHOOT_ANIMATION_FRAME_MS / 1000
+
+
+def update_player(canvas, player, keys_pressed, width, height, obstacles, trunk_photo, other_players, mines):
     """
     Macht: Aktualisiert einen Spieler fuer einen Frame (Drehung, Bewegung, Projektile).
     Input: canvas, player, keys_pressed, width, height (Spielfeldgroesse),
-           obstacles (Baeume), trunk_photo (Stumpf-Bild)
+           obstacles (Baeume), trunk_photo (Stumpf-Bild), other_players (uebrige Spieler),
+           mines (Liste der Minen)
     Output: kein Rueckgabewert
     """
+    update_shoot_animations(canvas, player)  # auch nach dem Tod zu Ende abspielen
+
     if not player["alive"]:
         player["moving"] = False
         return
 
     up, down, left, right, dx, dy = read_movement_keys(player["keys"], keys_pressed)
     update_rotation(canvas, player, up, down, left, right)
-    move_tank(canvas, player, dx, dy, width, height, obstacles)
+    move_tank(canvas, player, dx, dy, width, height, obstacles, other_players, mines)
     update_projectiles(canvas, player, obstacles, trunk_photo, width, height)
 
 
@@ -389,8 +547,8 @@ def check_hits(canvas, players):
                 if target is shooter or not target["alive"]:
                     continue
 
-                tank_box = canvas.bbox(target["tank"])
-                if tank_box and rects_overlap(bullet_box, tank_box):
+                cx, cy, radius = tank_hit_circle(canvas, target)
+                if circle_rect_overlap(cx, cy, radius, bullet_box):
                     target["alive"] = False
                     canvas.delete(target["tank"])
                     canvas.delete(p["id"])
@@ -436,6 +594,18 @@ def run_game(root, mode):
         for tree in obstacle_boxes
     ]
 
+    mine_photo = load_mine_photo()
+    canvas.mine_photo = mine_photo
+    mines = spawn_mines(canvas, WIDTH, HEIGHT, mine_photo, tree_boxes)
+    mine_boxes = [
+        (mine["cx"] - mine["radius"], mine["cy"] - mine["radius"], mine["cx"] + mine["radius"], mine["cy"] + mine["radius"])
+        for mine in mines
+    ]
+    spawn_avoid_boxes = tree_boxes + mine_boxes
+
+    shoot_frames = load_shoot_animation_frames()
+    canvas.shoot_frames = shoot_frames
+
     placed_spawns = []
 
     def random_tank_spawn():
@@ -445,7 +615,7 @@ def run_game(root, mode):
         Output: (x, y) -- eine Spawnposition
         """
         for _ in range(50):
-            x, y = random_spawn_position(WIDTH, HEIGHT, tree_boxes, tank_half_w, tank_half_h)
+            x, y = random_spawn_position(WIDTH, HEIGHT, spawn_avoid_boxes, tank_half_w, tank_half_h)
             far_enough = all(
                 math.hypot(x - px, y - py) >= MIN_PLAYER_SPAWN_DISTANCE
                 for px, py in placed_spawns
@@ -459,13 +629,13 @@ def run_game(root, mode):
     spawn2_x, spawn2_y = random_tank_spawn()
 
     players = [
-        create_player(root, canvas, "Spieler 1", PLAYER_KEYS[1], tank_images_by_player[1], spawn1_x, spawn1_y),
-        create_player(root, canvas, "Spieler 2", PLAYER_KEYS[2], tank_images_by_player[2], spawn2_x, spawn2_y),
+        create_player(root, canvas, "Spieler 1", PLAYER_KEYS[1], tank_images_by_player[1], spawn1_x, spawn1_y, shoot_frames),
+        create_player(root, canvas, "Spieler 2", PLAYER_KEYS[2], tank_images_by_player[2], spawn2_x, spawn2_y, shoot_frames),
     ]
     if mode == "1 vs 1 vs 1":
         spawn3_x, spawn3_y = random_tank_spawn()
         players.append(
-            create_player(root, canvas, "Spieler 3", PLAYER_KEYS[3], tank_images_by_player[3], spawn3_x, spawn3_y)
+            create_player(root, canvas, "Spieler 3", PLAYER_KEYS[3], tank_images_by_player[3], spawn3_x, spawn3_y, shoot_frames)
         )
 
     keys_pressed = set()
@@ -501,7 +671,8 @@ def run_game(root, mode):
         nonlocal move_channel
 
         for player in players:
-            update_player(canvas, player, keys_pressed, WIDTH, HEIGHT, obstacle_boxes, trunk_photo)
+            other_players = [p for p in players if p is not player]
+            update_player(canvas, player, keys_pressed, WIDTH, HEIGHT, obstacle_boxes, trunk_photo, other_players, mines)
 
         any_moving = any(p["moving"] for p in players)
         if any_moving and move_channel is None:
