@@ -82,6 +82,8 @@ SHOOT_COOLDOWN = 4
 PROJECTILE_SPEED = 8
 PROJECTILE_RADIUS = 4
 BARREL_OFFSET = 20
+RELOAD_RING_RADIUS = 6  #kleiner Nachlade-Ring neben dem Namensschild
+RELOAD_RING_GAP = 6  #Abstand zwischen Namenstext und Ring
 
 ANGLE_STEPS = [0, 45, 90, 135, 180, 225, 270, 315]
 
@@ -340,9 +342,20 @@ def create_player(root, canvas, name, keys, tank_images, muzzle_flash_frames, st
         font=("Calibri", 12, "bold"),
     )
 
+    r = RELOAD_RING_RADIUS
+    _, name_top, name_right, name_bottom = canvas.bbox(name_tag)
+    ring_cx = name_right + RELOAD_RING_GAP + r
+    ring_cy = (name_top + name_bottom) / 2
+    reload_ring = canvas.create_arc(
+        ring_cx - r, ring_cy - r, ring_cx + r, ring_cy + r,
+        start=90, extent=0, style="arc", outline="gray", width=2,
+        state="hidden",
+    )
+
     player = {
         "tank": tank,
         "name_tag": name_tag,
+        "reload_ring": reload_ring,
         "name": name,
         "alive": True,
         "moving": False,
@@ -426,6 +439,7 @@ def destroy_player(canvas, player, explosion_frames):
     x, y = canvas.coords(player["tank"])
     canvas.delete(player["tank"])
     canvas.delete(player["name_tag"])
+    canvas.delete(player["reload_ring"])
     explosion_id = canvas.create_image(x, y, image=explosion_frames[0])
     player["alive"] = False
     player["moving"] = False
@@ -582,6 +596,32 @@ def update_shoot_animations(canvas, player):
     show_tank_image(canvas, player)
 
 
+def update_reload_indicator(canvas, player):
+    """
+    Macht: Zeigt einen kleinen grauen Ladering neben dem Namensschild, der
+           sich fuellt, waehrend der Schuss-Cooldown laeuft, und verschwindet,
+           sobald wieder geschossen werden kann.
+    Input: canvas, player (Spieler-Dict)
+    Output: kein Rueckgabewert
+    """
+    if not player["alive"]:
+        canvas.itemconfig(player["reload_ring"], state="hidden")
+        return
+
+    elapsed = time.time() - player["state"]["last_shot_time"]
+    progress = min(1.0, elapsed / SHOOT_COOLDOWN)
+    if progress >= 1.0:
+        canvas.itemconfig(player["reload_ring"], state="hidden")
+        return
+
+    r = RELOAD_RING_RADIUS
+    _, name_top, name_right, name_bottom = canvas.bbox(player["name_tag"])
+    ring_cx = name_right + RELOAD_RING_GAP + r
+    ring_cy = (name_top + name_bottom) / 2
+    canvas.coords(player["reload_ring"], ring_cx - r, ring_cy - r, ring_cx + r, ring_cy + r)
+    canvas.itemconfig(player["reload_ring"], state="normal", extent=-360 * progress)
+
+
 def update_explosion(canvas, player, explosion_frames, wrecks):
     """
     Macht: Zeigt den naechsten Explosionsframe. Nach dem letzten Frame wird die
@@ -621,6 +661,7 @@ def update_player(canvas, player, keys_pressed, width, height, obstacles, trunk_
     """
     update_shoot_animations(canvas, player)
     update_explosion(canvas, player, explosion_frames, wrecks)
+    update_reload_indicator(canvas, player)
 
     if not player["alive"]:
         player["moving"] = False
