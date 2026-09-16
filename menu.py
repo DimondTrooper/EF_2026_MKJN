@@ -93,7 +93,7 @@ def controls_screen(mode):
         "Turn Left                                                               A\n"
         "Shoot                                                                     E")
     p3_text=(
-        "Move Forward                                                   Y\n"
+        "Move Forward                                                   z\n"
         "Move Backward                                                H\n\n"
         "Turn Right                                                            J\n"
         "Turn Left                                                              G\n"

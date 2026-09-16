@@ -76,7 +76,7 @@ ANGLE_TO_VECTOR = {
 PLAYER_KEYS = {
     1: {"up": "w", "down": "s", "left": "a", "right": "d", "shoot": "e"},
     2: {"up": "up", "down": "down", "left": "left", "right": "right", "shoot": "Control_R"},
-    3: {"up": "up", "down": "down", "left": "left", "right": "right", "shoot": "Control_L"},
+    3: {"up": "z", "down": "h", "left": "g", "right": "j", "shoot": "u"},
 }
 
 PLAYER_COLORS = {
