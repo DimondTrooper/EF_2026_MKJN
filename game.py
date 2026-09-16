@@ -6,7 +6,7 @@ import time
 import pygame
 from tkinter import Button, Canvas
 from PIL import Image, ImageTk
-from build_tank_images import get_destroyed_tank_images, get_muzzle_flash_frames, get_tank_images
+from build_tank_images import HULL_PX, get_destroyed_tank_frames, get_muzzle_flash_frames, get_tank_images
 from scoreboard import get_leaderboard, record_win, register_players
 from winner_screen import show_winner_screen
 import random
@@ -42,7 +42,11 @@ OBSTACLE_MAX_COUNT = 15
 # Panzer-Bilder sind quadratisch (gleiche Groesse in jeder Drehstufe), aber
 # je nach Drehung ist der sichtbare Panzer rautenfoermig statt rechteckig --
 # eine runde Hitbox passt sich dem viel besser an als das volle Quadrat.
-TANK_HITBOX_SCALE = 0.5
+# Bezug ist die tatsaechliche Rumpfbreite (HULL_PX) und nicht die Bildflaeche:
+# die Bildflaeche enthaelt unterschiedlich viel leeren Rand und waere je nach
+# Panzerfarbe verschieden gross.
+TANK_HITBOX_SCALE = 1.15
+TANK_HITBOX_RADIUS = HULL_PX / 2 * TANK_HITBOX_SCALE
 
 MINE_IMAGE_PATH = "Assets/Mine.png"
 MINE_COUNT = 6
@@ -55,7 +59,12 @@ EXPLOSION_FRAME_COUNT = 4
 EXPLOSION_FRAME_MS = 80
 EXPLOSION_DISPLAY_SIZE = 110
 WIN_SCREEN_DELAY_MS = 3000  # Pause nach Explosion/Wrack, bevor das Leaderboard erscheint
-WRECK_HITBOX_SCALE = 0.5  # Wracks geben Deckung und blockieren wie Panzer/Baeume
+# Wracks geben Deckung und blockieren wie Panzer/Baeume. Bezug ist wieder die
+# Rumpfbreite und nicht die Bildflaeche -- die Wrack-Bilder enthalten eine
+# grosse Rauchwolke, die sonst eine viel zu grosse Hitbox ergeben wuerde.
+WRECK_HITBOX_SCALE = 1.15
+WRECK_HITBOX_RADIUS = HULL_PX / 2 * WRECK_HITBOX_SCALE
+WRECK_FRAME_MS = 180  # Tempo der Rauch-Animation des brennenden Wracks
 
 pygame.mixer.init()
 pygame.mixer.set_num_channels(16)
@@ -291,8 +300,7 @@ def tank_hit_circle(canvas, player):
     Output: (cx, cy, radius)
     """
     x, y = canvas.coords(player["tank"])
-    radius = min(player["tank_width"], player["tank_height"]) / 2 * TANK_HITBOX_SCALE
-    return x, y, radius
+    return x, y, TANK_HITBOX_RADIUS
 
 
 def spawn_obstacles(canvas, width, height, tree_photos):
@@ -514,7 +522,7 @@ def move_tank(canvas, player, forward, backward, width, height, obstacles, other
     half_h = player["tank_height"] // 2
     new_x = clamp(x + dx, half_w, width - half_w)
     new_y = clamp(y + dy, half_h, height - half_h)
-    new_radius = min(player["tank_width"], player["tank_height"]) / 2 * TANK_HITBOX_SCALE
+    new_radius = TANK_HITBOX_RADIUS
 
     blocked_by_tree = any(
         circles_overlap(new_x, new_y, new_radius, tree["cx"], tree["cy"], tree["radius"])
@@ -638,16 +646,34 @@ def update_explosion(canvas, player, explosion_frames, wrecks):
     if explosion["frame"] >= len(explosion_frames):
         x, y = canvas.coords(explosion["id"])
         canvas.delete(explosion["id"])
-        wreck_image = canvas.destroyed_tank_images[player["state"]["angle"]]
-        wreck_id = canvas.create_image(x, y, image=wreck_image)
+        frames = canvas.destroyed_tank_frames[player["state"]["angle"]]
+        wreck_id = canvas.create_image(x, y, image=frames[0])
         player["wreck"] = wreck_id
-        box = canvas.bbox(wreck_id)
-        radius = min(box[2] - box[0], box[3] - box[1]) / 2 * WRECK_HITBOX_SCALE
-        wrecks.append({"id": wreck_id, "cx": x, "cy": y, "radius": radius})
+        wrecks.append({
+            "id": wreck_id, "cx": x, "cy": y, "radius": WRECK_HITBOX_RADIUS,
+            "frames": frames, "frame": 0,
+            "next_frame_time": time.time() + WRECK_FRAME_MS / 1000,
+        })
         player["explosion"] = None
         return
     canvas.itemconfig(explosion["id"], image=explosion_frames[explosion["frame"]])
     explosion["next_frame_time"] = time.time() + EXPLOSION_FRAME_MS / 1000
+
+
+def update_wrecks(canvas, wrecks):
+    """
+    Macht: Spielt die Rauch-Animation der brennenden Wracks ab. Die Bilderfolge
+           laeuft in Dauerschleife, das Wrack qualmt also bis zum Spielende.
+    Input: canvas, wrecks (Liste der Wracks)
+    Output: kein Rueckgabewert
+    """
+    now = time.time()
+    for wreck in wrecks:
+        if now < wreck["next_frame_time"]:
+            continue
+        wreck["frame"] = (wreck["frame"] + 1) % len(wreck["frames"])
+        canvas.itemconfig(wreck["id"], image=wreck["frames"][wreck["frame"]])
+        wreck["next_frame_time"] = now + WRECK_FRAME_MS / 1000
 
 
 def update_player(canvas, player, keys_pressed, width, height, obstacles, trunk_photo, other_players, mines, explosion_frames, wrecks):
@@ -745,7 +771,7 @@ def run_game(root, mode, player_names=None):
     }
     explosion_frames = load_explosion_frames()
     canvas.explosion_frames = explosion_frames
-    canvas.destroyed_tank_images = get_destroyed_tank_images(target_size=EXPLOSION_DISPLAY_SIZE)
+    canvas.destroyed_tank_frames = get_destroyed_tank_frames()
 
     tank_half_w = tank_images_by_player[1][0].width() // 2
     tank_half_h = tank_images_by_player[1][0].height() // 2
@@ -877,6 +903,7 @@ def run_game(root, mode, player_names=None):
             move_channel = None
 
         check_hits(canvas, players, explosion_frames)
+        update_wrecks(canvas, wrecks)
 
         alive_players = [p for p in players if p["alive"]]
         if len(alive_players) <= 1:
@@ -912,6 +939,21 @@ def run_game(root, mode, player_names=None):
                     return_to_menu,
                 )
 
+            def keep_wrecks_burning():
+                """
+                Macht: Haelt die Rauch-Animation der Wracks waehrend der Pause
+                       vor dem Leaderboard am Laufen. Die normale Spiel-Loop
+                       ist hier schon beendet -- ohne diese Schleife wuerde das
+                       Wrack genau dann stehenbleiben, wenn man es ansieht.
+                Input: keine
+                Output: kein Rueckgabewert
+                """
+                if not game_state["active"] or not canvas.winfo_exists():
+                    return
+                update_wrecks(canvas, wrecks)
+                root.after(DELAY, keep_wrecks_burning)
+
+            keep_wrecks_burning()
             root.after(WIN_SCREEN_DELAY_MS, show_screen)
             return
 
