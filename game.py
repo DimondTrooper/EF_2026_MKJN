@@ -534,12 +534,16 @@ def check_hits(canvas, players):
                     break
 
 
-def run_game(root, mode):
+def run_game(root, mode, player_names=None):
     """
     Macht: Baut das Spielfeld auf (Hintergrund, Baeume, Spieler) und startet die Spiel-Loop.
-    Input: root (Tk-Fenster), mode (Spielmodus-String, "1 vs 1" oder "1 vs 1 vs 1")
+    Input: root (Tk-Fenster), mode (Spielmodus-String, "1 vs 1" oder "1 vs 1 vs 1"),
+           player_names (Liste der vom Menu eingegebenen Spielernamen, optional)
     Output: kein Rueckgabewert
     """
+    player_count = 3 if mode == "1 vs 1 vs 1" else 2
+    if not player_names or len(player_names) < player_count:
+        player_names = [f"Spieler {n}" for n in range(1, player_count + 1)]
     for widget in root.winfo_children():
         widget.destroy()
 
@@ -607,13 +611,13 @@ def run_game(root, mode):
     spawn2_x, spawn2_y = random_tank_spawn()
 
     players = [
-        create_player(root, canvas, "Spieler 1", PLAYER_KEYS[1], tank_images_by_player[1], spawn1_x, spawn1_y, shoot_frames),
-        create_player(root, canvas, "Spieler 2", PLAYER_KEYS[2], tank_images_by_player[2], spawn2_x, spawn2_y, shoot_frames),
+        create_player(root, canvas, player_names[0], PLAYER_KEYS[1], tank_images_by_player[1], spawn1_x, spawn1_y, shoot_frames),
+        create_player(root, canvas, player_names[1], PLAYER_KEYS[2], tank_images_by_player[2], spawn2_x, spawn2_y, shoot_frames),
     ]
     if mode == "1 vs 1 vs 1":
         spawn3_x, spawn3_y = random_tank_spawn()
         players.append(
-            create_player(root, canvas, "Spieler 3", PLAYER_KEYS[3], tank_images_by_player[3], spawn3_x, spawn3_y, shoot_frames)
+            create_player(root, canvas, player_names[2], PLAYER_KEYS[3], tank_images_by_player[3], spawn3_x, spawn3_y, shoot_frames)
         )
 
     keys_pressed = set()

@@ -154,7 +154,12 @@ def name_input_screen(mode):
         player_name_box(0.7, 'Player 3', 'Player 3', tank_p3_img)
  
     #play btn->launches the game
-    btn_play = Button(frame, text='Play', bg='orange', font=('Calibri', 14, 'bold'), command=lambda: game.run_game(root, mode))
+    #Namenseingabe von Noah geschrieben 
+    def start_game():
+        names = [entry.get().strip() or default for entry, default in zip(name_entries, [f'Player {i+1}' for i in range(len(name_entries))])]
+        game.run_game(root, mode, names)
+
+    btn_play = Button(frame, text='Play', bg='orange', font=('Calibri', 14, 'bold'), command=start_game)
     btn_play.place(relx=0.36, rely=0.77, relwidth=0.27, relheight=0.1)
  
 root = Tk()
