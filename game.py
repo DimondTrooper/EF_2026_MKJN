@@ -15,8 +15,8 @@ MOVE_SOUND_FADEOUT_MS = 300  # sanftes Ausklingen statt hartem Stopp
 
 TREE_IMAGE_PATHS = ["Assets/Tree_1.png", "Assets/Tree_2.png"]
 TREE_SCALE = 0.8  # 20% kleiner als die Originalgrafik
-OBSTACLE_MIN_COUNT = 5
-OBSTACLE_MAX_COUNT = 10
+OBSTACLE_MIN_COUNT = 7
+OBSTACLE_MAX_COUNT = 15
 
 pygame.mixer.init()
 SHOOT_SOUND = pygame.mixer.Sound(SHOOT_SOUND_PATH)
