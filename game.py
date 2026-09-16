@@ -52,15 +52,6 @@ MIN_PLAYER_SPAWN_DISTANCE = 200
 
 ROTATE_RESTART_COOLDOWN = 0.15
 
-# Ohne diese Bremse kann man durch staendiges Tastenwechseln beliebig lange
-# weiterdrehen (nur verlangsamt, nie gestoppt). Nach MAX_CONSECUTIVE_ROTATION_STEPS
-# Schritten am Stueck gibt es deshalb eine deutlich laengere Zwangspause. Bleibt
-# der Panzer laenger als SETTLE_RESET_TIME in eine Richtung stehen, gilt die
-# naechste Drehung wieder als frische Sequenz (Zaehler wird zurueckgesetzt).
-MAX_CONSECUTIVE_ROTATION_STEPS = 3
-ROTATION_LOCKOUT_DURATION = 1.0
-SETTLE_RESET_TIME = 0.5
-
 SHOOT_COOLDOWN = 4
 PROJECTILE_SPEED = 8
 PROJECTILE_RADIUS = 4
@@ -303,8 +294,6 @@ def create_player(root, canvas, name, keys, tank_images, start_x, start_y, shoot
             "last_rotate_time": 0,
             "rotation_ready_time": 0,
             "last_shot_time": 0,
-            "consecutive_rotation_steps": 0,
-            "last_rotation_complete_time": 0,
         },
         "projectiles": [],
         "shoot_animations": [],
@@ -388,11 +377,7 @@ def update_rotation(canvas, player, up, down, left, right):
         and state["angle"] == state["target_angle"]
         and now >= state["rotation_ready_time"]
     ):
-        new_target = DIRECTION_TO_ANGLE[key]
-        if new_target != state["target_angle"]:
-            if now - state["last_rotation_complete_time"] >= SETTLE_RESET_TIME:
-                state["consecutive_rotation_steps"] = 0
-            state["target_angle"] = new_target
+        state["target_angle"] = DIRECTION_TO_ANGLE[key]
 
     if state["angle"] == state["target_angle"]:
         return
@@ -404,15 +389,8 @@ def update_rotation(canvas, player, up, down, left, right):
     canvas.itemconfig(player["tank"], image=player["tank_images"][state["angle"]])
     player["tank_width"] = player["tank_images"][state["angle"]].width()
     player["tank_height"] = player["tank_images"][state["angle"]].height()
-
     if state["angle"] == state["target_angle"]:
-        state["last_rotation_complete_time"] = now
-        state["consecutive_rotation_steps"] += 1
-        if state["consecutive_rotation_steps"] >= MAX_CONSECUTIVE_ROTATION_STEPS:
-            state["rotation_ready_time"] = now + ROTATION_LOCKOUT_DURATION
-            state["consecutive_rotation_steps"] = 0
-        else:
-            state["rotation_ready_time"] = now + ROTATE_RESTART_COOLDOWN
+        state["rotation_ready_time"] = now + ROTATE_RESTART_COOLDOWN
 
 
 def move_tank(canvas, player, dx, dy, width, height, obstacles, other_players, mines):
