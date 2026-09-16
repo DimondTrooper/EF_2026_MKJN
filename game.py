@@ -1,5 +1,5 @@
 import os
-os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")  # keine Begruessungs-Ausgabe im Terminal
+os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
 
 import math
 import time
@@ -12,16 +12,13 @@ import random
 BACKGROUND_PATH = "Assets/Map_real.png"
 SHOOT_SOUND_PATH = "Sounds/Shoot.wav"
 MOVE_SOUND_PATH = "Sounds/Tank_moving.wav"
-MOVE_SOUND_FADEOUT_MS = 300  # sanftes Ausklingen statt hartem Stopp
+MOVE_SOUND_FADEOUT_MS = 300
 
 TREE_IMAGE_PATHS = ["Assets/Tree_1.png", "Assets/Tree_2.png"]
-TREE_TRUNK_PATH = "Assets/Tree_Trunk.png"  # Bild fuer zerstoerte Baeume (rein dekorativ, keine Hitbox)
-TREE_SCALE = 0.8  # 20% kleiner als die Originalgrafik
-# Der Stumpf ist im Rohbild (800x712) voellig anders skaliert als die Baeume
-# (~120x120) -- deshalb NICHT ueber TREE_SCALE, sondern relativ zur
-# tatsaechlichen (bereits skalierten) Baumgroesse auf dem Bildschirm.
-TREE_TRUNK_SIZE_RATIO = 0.5  # 50% der durchschnittlichen Baumgroesse
-TREE_HITBOX_SCALE = 0.85  # Kollisionsradius als Anteil des halben Bildausmasses
+TREE_TRUNK_PATH = "Assets/Tree_Trunk.png"
+TREE_SCALE = 0.8
+TREE_TRUNK_SIZE_RATIO = 0.5
+TREE_HITBOX_SCALE = 0.85
 OBSTACLE_MIN_COUNT = 7
 OBSTACLE_MAX_COUNT = 15
 
@@ -33,67 +30,70 @@ SPEED = 1.5
 FPS = 60
 DELAY = int(1000 / FPS)
 
-# minimale Zeit (Sekunden) zwischen zwei Drehschritten -- unabhaengig davon,
-# wie oft/schnell man Tasten drueckt, kann sich der Panzer nicht schneller
-# drehen als das hier erlaubt
 ROTATE_COOLDOWN = 0.12
 
-SPAWN_MARGIN = 60  # Abstand (Pixel) zum Bildschirmrand, in dem kein Panzer spawnt
-MIN_PLAYER_SPAWN_DISTANCE = 200  # Mindestabstand (Pixel) zwischen zwei Panzer-Spawnpunkten
+SPAWN_MARGIN = 60
+MIN_PLAYER_SPAWN_DISTANCE = 200
 
-# kurze Pause (Sekunden) NACH einer abgeschlossenen Drehung, bevor eine neue
-# Drehung angenommen wird -- zusaetzlich zur Regel, dass die aktuelle Drehung
-# erst fertig sein muss
 ROTATE_RESTART_COOLDOWN = 0.15
 
-SHOOT_COOLDOWN = 4     # Sekunden zwischen Schuessen
+SHOOT_COOLDOWN = 4
 PROJECTILE_SPEED = 8
 PROJECTILE_RADIUS = 4
-BARREL_OFFSET = 20     # Kugel startet so viele Pixel vor dem Panzer-Zentrum
- 
-# ANGLE_STEPS muss der Reihenfolge im Kreis entsprechen (fuer next_step_towards)
+BARREL_OFFSET = 20
+
 ANGLE_STEPS = [0, 45, 90, 135, 180, 225, 270, 315]
- 
+
 DIRECTION_TO_ANGLE = {
-    (True, False, False, False): 0,    # nur oben
-    (True, False, False, True): 315,   # oben + rechts
-    (False, False, False, True): 270,  # nur rechts
-    (False, True, False, True): 225,   # unten + rechts
-    (False, True, False, False): 180,  # nur unten
-    (False, True, True, False): 135,   # unten + links
-    (False, False, True, False): 90,   # nur links
-    (True, False, True, False): 45,    # oben + links
+    (True, False, False, False): 0,
+    (True, False, False, True): 315,
+    (False, False, False, True): 270,
+    (False, True, False, True): 225,
+    (False, True, False, False): 180,
+    (False, True, True, False): 135,
+    (False, False, True, False): 90,
+    (True, False, True, False): 45,
 }
 ANGLE_TO_VECTOR = {
-    0:   (0, -1),   # oben
-    45:  (-1, -1),  # oben-links
-    90:  (-1, 0),   # links
-    135: (-1, 1),   # unten-links
-    180: (0, 1),    # unten
-    225: (1, 1),    # unten-rechts
-    270: (1, 0),    # rechts
-    315: (1, -1),   # oben-rechts
+    0:   (0, -1),
+    45:  (-1, -1),
+    90:  (-1, 0),
+    135: (-1, 1),
+    180: (0, 1),
+    225: (1, 1),
+    270: (1, 0),
+    315: (1, -1),
 }
- 
-# Tastenbelegung pro Spieler -- muss zu controls_screen() in menu.py passen
+
 PLAYER_KEYS = {
     1: {"up": "w", "down": "s", "left": "a", "right": "d", "shoot": "e"},
     2: {"up": "up", "down": "down", "left": "left", "right": "right", "shoot": "Control_R"},
     3: {"up": "up", "down": "down", "left": "left", "right": "right", "shoot": "Control_L"},
 }
- 
- 
-# -- Auf Modul-Ebene, damit unittest sie direkt importieren/testen kann.
- 
+
+PLAYER_COLORS = {
+    1: "blue",
+    2: "red",
+    3: "green",
+}
+
+
 def clamp(value, min_value, max_value):
+    """
+    Macht: Begrenzt einen Wert auf einen erlaubten Bereich.
+    Input: value, min_value, max_value (Zahlen)
+    Output: Zahl, begrenzt auf den Bereich [min_value, max_value]
+    """
     return max(min_value, min(value, max_value))
 
-#Claude code to avoide spawing in trees 
+
 def random_spawn_position(width, height, avoid_boxes=None, half_w=0, half_h=0, max_attempts=50):
-    """Zufaellige Position mit Abstand zum Bildschirmrand (SPAWN_MARGIN).
-    Ist avoid_boxes gesetzt, wird eine Position gesucht, an der eine Box der
-    Groesse (2*half_w, 2*half_h) keine dieser Boxen ueberlappt -- damit z.B.
-    Panzer nicht auf einem Baum spawnen."""
+    """
+    Macht: Sucht eine zufaellige Position im Spielfeld, die keine der avoid_boxes ueberlappt.
+    Input: width, height (Spielfeldgroesse), avoid_boxes (Liste von Rechtecken, optional),
+           half_w, half_h (halbe Groesse des zu platzierenden Objekts), max_attempts (Zahl)
+    Output: (x, y) -- eine Position im Spielfeld
+    """
     for _ in range(max_attempts):
         x = random.randint(SPAWN_MARGIN, width - SPAWN_MARGIN)
         y = random.randint(SPAWN_MARGIN, height - SPAWN_MARGIN)
@@ -102,20 +102,26 @@ def random_spawn_position(width, height, avoid_boxes=None, half_w=0, half_h=0, m
         candidate_box = (x - half_w, y - half_h, x + half_w, y + half_h)
         if not any(rects_overlap(candidate_box, box) for box in avoid_boxes):
             return x, y
-    return x, y  # kein freier Platz gefunden -- letzte Position notgedrungen nehmen
-###
+    return x, y
 
 
 def load_tree_photo(path):
+    """
+    Macht: Laedt ein Baumbild und skaliert es um den Faktor TREE_SCALE.
+    Input: path (Dateipfad zu einem Baumbild)
+    Output: ImageTk.PhotoImage
+    """
     img = Image.open(path)
     new_size = (round(img.width * TREE_SCALE), round(img.height * TREE_SCALE))
     return ImageTk.PhotoImage(img.resize(new_size))
 
 
 def load_image_scaled_to(path, target_size):
-    """Skaliert ein Bild so, dass seine groessere Seite target_size Pixel
-    misst (Seitenverhaeltnis bleibt erhalten) -- unabhaengig von der
-    Roh-Aufloesung der Datei."""
+    """
+    Macht: Laedt ein Bild und skaliert es so, dass seine groessere Seite target_size misst.
+    Input: path (Dateipfad zu einem Bild), target_size (Zielgroesse in Pixeln)
+    Output: ImageTk.PhotoImage
+    """
     img = Image.open(path)
     scale = target_size / max(img.width, img.height)
     new_size = (round(img.width * scale), round(img.height * scale))
@@ -123,11 +129,11 @@ def load_image_scaled_to(path, target_size):
 
 
 def circle_rect_overlap(cx, cy, radius, rect):
-    """True, wenn ein Kreis (cx, cy, radius) das Rechteck rect (x1,y1,x2,y2)
-    beruehrt/ueberschneidet. Baeume sind rund/sternfoermig -- eine rein
-    rechteckige Bounding-Box wuerde bis in die transparenten Ecken des
-    Bildes hinein blockieren, ein Kreis passt sich der sichtbaren Form
-    deutlich besser an."""
+    """
+    Macht: Prueft, ob sich ein Kreis und ein Rechteck ueberschneiden.
+    Input: cx, cy, radius (Kreis), rect (Rechteck als x1, y1, x2, y2)
+    Output: True oder False
+    """
     rx1, ry1, rx2, ry2 = rect
     closest_x = clamp(cx, rx1, rx2)
     closest_y = clamp(cy, ry1, ry2)
@@ -137,10 +143,11 @@ def circle_rect_overlap(cx, cy, radius, rect):
 
 
 def spawn_obstacles(canvas, width, height, tree_photos):
-    """Platziert die Baeume und gibt sie als Liste von
-    {"id", "cx", "cy", "radius"} zurueck (fuer die runde Kollision -- ein
-    von einem Projektil getroffener Baum wird daraus entfernt und von der
-    Canvas geloescht)."""
+    """
+    Macht: Platziert eine zufaellige Anzahl Baeume im Spielfeld.
+    Input: canvas, width, height (Spielfeldgroesse), tree_photos (Liste von Baumbildern)
+    Output: Liste von Baum-Dicts {"id", "cx", "cy", "radius"}
+    """
     count = random.randint(OBSTACLE_MIN_COUNT, OBSTACLE_MAX_COUNT)
     obstacles = []
     for _ in range(count):
@@ -154,7 +161,11 @@ def spawn_obstacles(canvas, width, height, tree_photos):
 
 
 def next_step_towards(current, target):
-    """Naechster Winkel aus ANGLE_STEPS auf dem kuerzesten Weg zu target."""
+    """
+    Macht: Ermittelt den naechsten Drehschritt auf dem kuerzesten Weg zum Zielwinkel.
+    Input: current, target (Winkel aus ANGLE_STEPS)
+    Output: naechster Winkel aus ANGLE_STEPS
+    """
     if current == target:
         return current
     i_current = ANGLE_STEPS.index(current)
@@ -166,16 +177,28 @@ def next_step_towards(current, target):
         return ANGLE_STEPS[(i_current + 1) % n]
     return ANGLE_STEPS[(i_current - 1) % n]
 
+
 def rects_overlap(a, b):
-    """a, b je (x1, y1, x2, y2). True, wenn sich die beiden Rechtecke ueberschneiden."""
+    """
+    Macht: Prueft, ob sich zwei Rechtecke ueberschneiden.
+    Input: a, b (Rechtecke als x1, y1, x2, y2)
+    Output: True oder False
+    """
     ax1, ay1, ax2, ay2 = a
     bx1, by1, bx2, by2 = b
     return not (ax2 < bx1 or ax1 > bx2 or ay2 < by1 or ay1 > by2)
-  
+
+
 def create_player(root, canvas, name, keys, tank_images, start_x, start_y):
+    """
+    Macht: Erstellt einen neuen Spieler samt Panzer-Bild und Schuss-Tastenbindung.
+    Input: root (Tk-Fenster), canvas, name (Spielername), keys (Tastenbelegung),
+           tank_images (Dict mit Panzerbildern), start_x, start_y (Startposition)
+    Output: player (Dict mit allen Spielerdaten)
+    """
 
     tank = canvas.create_image(start_x, start_y, image=tank_images[0])
- 
+
     player = {
         "tank": tank,
         "name": name,
@@ -194,16 +217,21 @@ def create_player(root, canvas, name, keys, tank_images, start_x, start_y):
         },
         "projectiles": [],
     }
- 
+
     def on_shoot(event):
+        """
+        Macht: Feuert einen Schuss ab, falls der Spieler lebt und der Cooldown abgelaufen ist.
+        Input: event (Tkinter-Tastenereignis)
+        Output: kein Rueckgabewert
+        """
         if not player["alive"]:
-            return # Spieler tot -> keine Schuesse mehr
+            return
         state = player["state"]
         now = time.time()
         if now - state["last_shot_time"] < SHOOT_COOLDOWN:
-            return  # noch in Abklingzeit
+            return
         state["last_shot_time"] = now
- 
+
         x, y = canvas.coords(tank)
         dx, dy = ANGLE_TO_VECTOR[state["angle"]]
         start_bx = x + dx * BARREL_OFFSET
@@ -217,25 +245,21 @@ def create_player(root, canvas, name, keys, tank_images, start_x, start_y):
         SHOOT_SOUND.play()
 
     root.bind(f"<KeyPress-{keys['shoot']}>", on_shoot)
- 
+
     return player
- 
- 
-def update_player(canvas, player, keys_pressed, width, height, obstacles, trunk_photo):
-    if not player["alive"]:
-        player["moving"] = False
-        return  # Spieler tot -> keine Updates mehr
-    """Ein Frame Logik fuer GENAU EINEN Spieler: Drehen, Bewegen, Projektile."""
-    keys = player["keys"]
-    state = player["state"]
- 
-    # 1. Tasten dieses Spielers auslesen
+
+
+def read_movement_keys(keys, keys_pressed):
+    """
+    Macht: Liest die Bewegungstasten eines Spielers aus und berechnet das Bewegungsdelta.
+    Input: keys (Tastenbelegung eines Spielers), keys_pressed (Menge aktuell gedrueckter Tasten)
+    Output: (up, down, left, right, dx, dy)
+    """
     up = keys["up"] in keys_pressed
     down = keys["down"] in keys_pressed
     left = keys["left"] in keys_pressed
     right = keys["right"] in keys_pressed
- 
-    # 2. Bewegung berechnen
+
     dx = dy = 0
     if up:
         dy -= SPEED
@@ -244,14 +268,21 @@ def update_player(canvas, player, keys_pressed, width, height, obstacles, trunk_
     if left:
         dx -= SPEED
     if right:
-        dx += SPEED 
- 
+        dx += SPEED
+
+    return up, down, left, right, dx, dy
+
+
+def update_rotation(canvas, player, up, down, left, right):
+    """
+    Macht: Aktualisiert Zielwinkel und tatsaechlichen Drehwinkel des Panzers.
+    Input: canvas, player (Spieler-Dict), up, down, left, right (Bool, Bewegungstasten)
+    Output: kein Rueckgabewert
+    """
+    state = player["state"]
     key = (up, down, left, right)
     now = time.time()
-    # neues Ziel nur uebernehmen, wenn die vorherige Drehung fertig ist UND
-    # der kurze Cooldown danach abgelaufen ist -- sonst kann man durch
-    # schnelles Tastenwechseln Drehungen aneinanderreihen und den Panzer
-    # beliebig lange weiterdrehen lassen
+
     if (
         key in DIRECTION_TO_ANGLE
         and state["angle"] == state["target_angle"]
@@ -259,49 +290,97 @@ def update_player(canvas, player, keys_pressed, width, height, obstacles, trunk_
     ):
         state["target_angle"] = DIRECTION_TO_ANGLE[key]
 
-    if state["angle"] != state["target_angle"]:
-        if now - state["last_rotate_time"] >= ROTATE_COOLDOWN:
-            state["last_rotate_time"] = now
-            state["angle"] = next_step_towards(state["angle"], state["target_angle"])
-            canvas.itemconfig(player["tank"], image=player["tank_images"][state["angle"]])
-            player["tank_width"] = player["tank_images"][state["angle"]].width()
-            player["tank_height"] = player["tank_images"][state["angle"]].height()
-            if state["angle"] == state["target_angle"]:
-                state["rotation_ready_time"] = now + ROTATE_RESTART_COOLDOWN
+    if state["angle"] == state["target_angle"]:
+        return
+    if now - state["last_rotate_time"] < ROTATE_COOLDOWN:
+        return
 
+    state["last_rotate_time"] = now
+    state["angle"] = next_step_towards(state["angle"], state["target_angle"])
+    canvas.itemconfig(player["tank"], image=player["tank_images"][state["angle"]])
+    player["tank_width"] = player["tank_images"][state["angle"]].width()
+    player["tank_height"] = player["tank_images"][state["angle"]].height()
+    if state["angle"] == state["target_angle"]:
+        state["rotation_ready_time"] = now + ROTATE_RESTART_COOLDOWN
+
+
+def move_tank(canvas, player, dx, dy, width, height, obstacles):
+    """
+    Macht: Bewegt den Panzer, sofern die Zielposition frei von Baeumen ist.
+    Input: canvas, player, dx, dy (Bewegungsdelta), width, height (Spielfeldgroesse),
+           obstacles (Liste von Baeumen)
+    Output: kein Rueckgabewert
+    """
     wants_to_move = dx != 0 or dy != 0
     player["moving"] = False
+    if not wants_to_move:
+        return
 
-    if wants_to_move:
-        x, y = canvas.coords(player["tank"])
-        half_w = player["tank_width"] // 2
-        half_h = player["tank_height"] // 2
-        new_x = clamp(x + dx, half_w, width - half_w)
-        new_y = clamp(y + dy, half_h, height - half_h)
-        new_box = (new_x - half_w, new_y - half_h, new_x + half_w, new_y + half_h)
-        blocked = any(circle_rect_overlap(tree["cx"], tree["cy"], tree["radius"], new_box) for tree in obstacles)
-        if not blocked:
-            canvas.move(player["tank"], new_x - x, new_y - y)
-            player["moving"] = True
+    x, y = canvas.coords(player["tank"])
+    half_w = player["tank_width"] // 2
+    half_h = player["tank_height"] // 2
+    new_x = clamp(x + dx, half_w, width - half_w)
+    new_y = clamp(y + dy, half_h, height - half_h)
+    new_box = (new_x - half_w, new_y - half_h, new_x + half_w, new_y + half_h)
 
+    blocked = any(circle_rect_overlap(tree["cx"], tree["cy"], tree["radius"], new_box) for tree in obstacles)
+    if blocked:
+        return
+
+    canvas.move(player["tank"], new_x - x, new_y - y)
+    player["moving"] = True
+
+
+def update_projectiles(canvas, player, obstacles, trunk_photo, width, height):
+    """
+    Macht: Bewegt die Projektile eines Spielers weiter und entfernt sie bei
+           Baum-Treffer oder beim Verlassen des Spielfelds.
+    Input: canvas, player, obstacles (Baeume), trunk_photo (Stumpf-Bild),
+           width, height (Spielfeldgroesse)
+    Output: kein Rueckgabewert
+    """
     for p in player["projectiles"][:]:
         canvas.move(p["id"], p["dx"] * PROJECTILE_SPEED, p["dy"] * PROJECTILE_SPEED)
         bullet_box = canvas.coords(p["id"])
         x1, y1, x2, y2 = bullet_box
+
         hit_tree = next(
             (tree for tree in obstacles if circle_rect_overlap(tree["cx"], tree["cy"], tree["radius"], bullet_box)),
             None,
         )
         if hit_tree is not None:
-            canvas.itemconfig(hit_tree["id"], image=trunk_photo)  # nur noch Stumpf, keine Hitbox mehr
+            canvas.itemconfig(hit_tree["id"], image=trunk_photo)
             obstacles.remove(hit_tree)
-        if x2 < 0 or x1 > width or y2 < 0 or y1 > height or hit_tree is not None:
+
+        left_field = x2 < 0 or x1 > width or y2 < 0 or y1 > height
+        if left_field or hit_tree is not None:
             canvas.delete(p["id"])
             player["projectiles"].remove(p)
 
 
+def update_player(canvas, player, keys_pressed, width, height, obstacles, trunk_photo):
+    """
+    Macht: Aktualisiert einen Spieler fuer einen Frame (Drehung, Bewegung, Projektile).
+    Input: canvas, player, keys_pressed, width, height (Spielfeldgroesse),
+           obstacles (Baeume), trunk_photo (Stumpf-Bild)
+    Output: kein Rueckgabewert
+    """
+    if not player["alive"]:
+        player["moving"] = False
+        return
+
+    up, down, left, right, dx, dy = read_movement_keys(player["keys"], keys_pressed)
+    update_rotation(canvas, player, up, down, left, right)
+    move_tank(canvas, player, dx, dy, width, height, obstacles)
+    update_projectiles(canvas, player, obstacles, trunk_photo, width, height)
+
+
 def check_hits(canvas, players):
-    """Prueft fuer alle Spieler, ob eines ihrer Projektile einen anderen (lebenden) Panzer trifft."""
+    """
+    Macht: Prueft fuer alle Spieler, ob ein Projektil einen gegnerischen Panzer trifft.
+    Input: canvas, players (Liste aller Spieler)
+    Output: kein Rueckgabewert
+    """
     for shooter in players:
         for p in shooter["projectiles"][:]:
             bullet_box = canvas.coords(p["id"])
@@ -320,46 +399,51 @@ def check_hits(canvas, players):
 
 
 def run_game(root, mode):
-    # altes Frame (Controls-Screen) weg
+    """
+    Macht: Baut das Spielfeld auf (Hintergrund, Baeume, Spieler) und startet die Spiel-Loop.
+    Input: root (Tk-Fenster), mode (Spielmodus-String, "1 vs 1" oder "1 vs 1 vs 1")
+    Output: kein Rueckgabewert
+    """
     for widget in root.winfo_children():
         widget.destroy()
- 
+
     WIDTH = root.winfo_width()
     HEIGHT = root.winfo_height()
- 
+
     canvas = Canvas(root, width=WIDTH, height=HEIGHT, bg="darkgreen")
     canvas.pack()
 
     background_image = Image.open(BACKGROUND_PATH).resize((WIDTH, HEIGHT))
     background_photo = ImageTk.PhotoImage(background_image)
-    canvas.background_photo = background_photo  # Referenz halten, sonst Garbage Collection
+    canvas.background_photo = background_photo
     canvas.create_image(0, 0, anchor="nw", image=background_photo)
 
     tree_photos = [load_tree_photo(path) for path in TREE_IMAGE_PATHS]
-    canvas.tree_photos = tree_photos  # Referenz halten, sonst Garbage Collection
+    canvas.tree_photos = tree_photos
     obstacle_boxes = spawn_obstacles(canvas, WIDTH, HEIGHT, tree_photos)
 
     avg_tree_size = sum(max(photo.width(), photo.height()) for photo in tree_photos) / len(tree_photos)
     trunk_photo = load_image_scaled_to(TREE_TRUNK_PATH, avg_tree_size * TREE_TRUNK_SIZE_RATIO)
-    canvas.trunk_photo = trunk_photo  # Referenz halten, sonst Garbage Collection
+    canvas.trunk_photo = trunk_photo
 
-    tank_images = get_tank_images()
+    player_numbers = [1, 2, 3] if mode == "1 vs 1 vs 1" else [1, 2]
+    tank_images_by_player = {n: get_tank_images(PLAYER_COLORS[n]) for n in player_numbers}
 
-    tank_half_w = tank_images[0].width() // 2
-    tank_half_h = tank_images[0].height() // 2
-    # grobe Bounding-Box um jeden Baumkreis, nur fuer die Spawn-Platzierung
-    # (muss nicht pixelgenau sein -- es soll nur kein Panzer auf einem Baum landen)
+    tank_half_w = tank_images_by_player[1][0].width() // 2
+    tank_half_h = tank_images_by_player[1][0].height() // 2
     tree_boxes = [
         (tree["cx"] - tree["radius"], tree["cy"] - tree["radius"], tree["cx"] + tree["radius"], tree["cy"] + tree["radius"])
         for tree in obstacle_boxes
     ]
 
-    # bereits vergebene Panzer-Spawnpunkte -- neue Punkte muessen zu allen
-    # davon mindestens MIN_PLAYER_SPAWN_DISTANCE (echter euklidischer Abstand,
-    # keine reine Box-Ueberlappung) entfernt sein
     placed_spawns = []
 
     def random_tank_spawn():
+        """
+        Macht: Findet eine Position mit Abstand zu Baeumen und zu bereits vergebenen Panzer-Spawns.
+        Input: keine
+        Output: (x, y) -- eine Spawnposition
+        """
         for _ in range(50):
             x, y = random_spawn_position(WIDTH, HEIGHT, tree_boxes, tank_half_w, tank_half_h)
             far_enough = all(
@@ -375,29 +459,45 @@ def run_game(root, mode):
     spawn2_x, spawn2_y = random_tank_spawn()
 
     players = [
-        create_player(root, canvas, "Spieler 1", PLAYER_KEYS[1], tank_images, spawn1_x, spawn1_y),
-        create_player(root, canvas, "Spieler 2", PLAYER_KEYS[2], tank_images, spawn2_x, spawn2_y),
+        create_player(root, canvas, "Spieler 1", PLAYER_KEYS[1], tank_images_by_player[1], spawn1_x, spawn1_y),
+        create_player(root, canvas, "Spieler 2", PLAYER_KEYS[2], tank_images_by_player[2], spawn2_x, spawn2_y),
     ]
     if mode == "1 vs 1 vs 1":
         spawn3_x, spawn3_y = random_tank_spawn()
         players.append(
-            create_player(root, canvas, "Spieler 3", PLAYER_KEYS[3], tank_images, spawn3_x, spawn3_y)
+            create_player(root, canvas, "Spieler 3", PLAYER_KEYS[3], tank_images_by_player[3], spawn3_x, spawn3_y)
         )
- 
+
     keys_pressed = set()
- 
+
     def on_key_down(event):
+        """
+        Macht: Merkt sich eine gedrueckte Taste.
+        Input: event (Tkinter-Tastenereignis)
+        Output: kein Rueckgabewert
+        """
         keys_pressed.add(event.keysym.lower())
- 
+
     def on_key_up(event):
+        """
+        Macht: Entfernt eine losgelassene Taste.
+        Input: event (Tkinter-Tastenereignis)
+        Output: kein Rueckgabewert
+        """
         keys_pressed.discard(event.keysym.lower())
- 
+
     root.bind("<KeyPress>", on_key_down)
     root.bind("<KeyRelease>", on_key_up)
 
     move_channel = None
 
     def game_loop():
+        """
+        Macht: Fuehrt einen Frame der Spiel-Loop aus (Update, Sound, Treffer,
+               Sieg-Check) und plant den naechsten Frame.
+        Input: keine
+        Output: kein Rueckgabewert
+        """
         nonlocal move_channel
 
         for player in players:
@@ -426,4 +526,3 @@ def run_game(root, mode):
         root.after(DELAY, game_loop)
 
     game_loop()
- 
