@@ -2,7 +2,7 @@ from tkinter import *
 from tkinter import messagebox
 import game
 import os
- 
+
 def mode_menu():
     #clear old widgets->feels like switching
     for widget in root.winfo_children():
@@ -62,6 +62,13 @@ def controls_screen(mode):
     #go-back-to-menu btn
     btn_back=Button(frame, text='← Return', bg='lightgray', command=mode_menu)
     btn_back.place(relx=0.005, rely=0.01, relwidth=0.1, relheight=0.1)
+
+    #load player tank images
+    global tank_p1_img, tank_p2_img, tank_p3_img
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    tank_p1_img = PhotoImage(file=os.path.join(script_dir, 'Assets', 'Tank_Blue_Right.png')).subsample(4, 4)
+    tank_p2_img = PhotoImage(file=os.path.join(script_dir, 'Assets', 'Red_Tank_Right.png')).subsample(4, 4)
+    tank_p3_img = PhotoImage(file=os.path.join(script_dir, 'Assets', 'Tank_Green_Right.png')).subsample(4, 4)
  
     #helpfunct->create player boxes(controls explain)
     def player_box(x_pos, title_text, controls_text):
@@ -73,6 +80,11 @@ def controls_screen(mode):
  
         lbl_body=Label(box, text=controls_text, font=('Calibri', 11), justify=LEFT)
         lbl_body.pack(padx=10, anchor='w')
+
+        #pics:
+        if title_text == 'Controls Player 1': Label(box, image=tank_p1_img).pack(pady=(25, 0))
+        elif title_text == 'Controls Player 2': Label(box, image=tank_p2_img).pack(pady=(25, 0))
+        elif title_text == 'Controls Player 3': Label(box, image=tank_p3_img).pack(pady=(25, 0))
  
     #texts-based on prototyp design
     p1_text=(
@@ -105,29 +117,6 @@ def controls_screen(mode):
     #play btn
     btn_play = Button(frame, text='Play', bg='orange', font=('Calibri', 14, 'bold'), command=lambda: game.run_game(root, mode))
     btn_play.place(relx=0.36, rely=0.75, relwidth=0.27, relheight=0.1)
-
-    lbl_body = Label(box, text=controls_text, font=('Calibri', 11), justify=LEFT)
-    lbl_body.pack(padx=10, anchor='w')
-
-    # ai created funct
-    try:
-            script_dir = os.path.dirname(os.path.abspath(__file__))
-            tank_path = os.path.join(script_dir, 'Assets', tank_filename)
-            raw_tank = PhotoImage(file=tank_path)
-            scaled_tank = raw_tank.subsample(6, 6) 
-            if '1' in title_text:
-                global p1_tank_img
-                p1_tank_img = scaled_tank
-            elif '2' in title_text:
-                global p2_tank_img
-                p2_tank_img = scaled_tank
-            else:
-                global p3_tank_img
-                p3_tank_img = scaled_tank
-            Label(box, image=scaled_tank).pack(pady=10)
-    except Exception as e:
-            print(f"Tank image error: {e}")
-    # ---------------------------------
  
 root = Tk()
 root.title('Tank Game')
