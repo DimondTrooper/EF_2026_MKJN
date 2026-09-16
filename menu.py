@@ -1,5 +1,4 @@
 from tkinter import *
-from tkinter import messagebox
 import game
 import os
 
@@ -114,9 +113,49 @@ def controls_screen(mode):
         player_box(0.38, 'Controls Player 2', p2_text)
         player_box(0.7, 'Controls Player 3', p3_text)
  
-    #play btn
+    #continue btn
+    btn_continue = Button(frame, text='Continue', bg='orange', font=('Calibri', 14, 'bold'), command=lambda: name_input_screen(mode))
+    btn_continue.place(relx=0.36, rely=0.75, relwidth=0.27, relheight=0.1)
+
+#wndw to hcange players' names
+def name_input_screen(mode):
+    for widget in root.winfo_children():
+        widget.destroy()
+    frame=Frame(root, bd=0)
+    frame.place(relx=0, rely=0, relwidth=1.0, relheight=1.0)
+    label=Label(frame, text='Enter Player Names', fg='brown', font=('Calibri', 20, 'bold'))
+    label.place(relx=0.2, rely=0.05, relwidth=0.6, relheight=0.1)
+    
+    # Return button goes back to controls screen
+    btn_back = Button(frame, text='← Return', bg='lightgray', command=lambda: controls_screen(mode))
+    btn_back.place(relx=0.005, rely=0.01, relwidth=0.1, relheight=0.1)
+    global name_entries
+    name_entries=[]
+
+    def player_name_box(x_pos, title_text, default_name, tank_img):
+        box=Frame(frame, bd=2, relief=GROOVE)
+        box.place(relx=x_pos, rely=0.18, relwidth=0.23, relheight=0.55)
+        lbl_title=Label(box, text=title_text, font=('Calibri', 14, 'bold'))
+        lbl_title.pack(pady=5)
+        if tank_img:
+            Label(box, image=tank_img).pack(pady=(35, 10))
+        lbl_desc=Label(box, text="Enter name here:", font=('Calibri', 11))
+        lbl_desc.pack(pady=5)
+        ent=Entry(box, font=('Calibri', 12), justify='center')
+        ent.insert(0, default_name)
+        ent.pack(padx=10, pady=5, fill=X)
+        name_entries.append(ent)
+    if mode == '1 vs 1':
+        player_name_box(0.21, 'Player 1', 'Player 1', tank_p1_img)
+        player_name_box(0.54, 'Player 2', 'Player 2', tank_p2_img)
+    else:
+        player_name_box(0.06, 'Player 1', 'Player 1', tank_p1_img)
+        player_name_box(0.38, 'Player 2', 'Player 2', tank_p2_img)
+        player_name_box(0.7, 'Player 3', 'Player 3', tank_p3_img)
+ 
+    #play btn->launches the game
     btn_play = Button(frame, text='Play', bg='orange', font=('Calibri', 14, 'bold'), command=lambda: game.run_game(root, mode))
-    btn_play.place(relx=0.36, rely=0.75, relwidth=0.27, relheight=0.1)
+    btn_play.place(relx=0.36, rely=0.77, relwidth=0.27, relheight=0.1)
  
 root = Tk()
 root.title('Tank Game')
