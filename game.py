@@ -4,9 +4,10 @@ os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
 import math
 import time
 import pygame
-from tkinter import Button, Canvas
+from tkinter import Canvas
 from PIL import Image, ImageTk
 from build_tank_images import get_muzzle_flash_frames, get_tank_images
+from winner_screen import show_winner_screen
 import random
 
 BACKGROUND_PATH = "Assets/Map_Hintergrund.png"
@@ -563,39 +564,6 @@ def check_hits(canvas, players, explosion_frames):
                     break
 
 
-def show_winner_screen(root, winner_text, mode, player_names):
-    """
-    Macht: Zeigt eine leere Endseite mit Gewinnertext und einem Replay-Button.
-    Input: root (Tk-Fenster), winner_text (Text), mode (Spielmodus), player_names (Liste)
-    Output: kein Rueckgabewert
-    """
-    for player_keys in PLAYER_KEYS.values():
-        root.unbind(f"<KeyPress-{player_keys['shoot']}>")
-    root.unbind("<KeyPress>")
-    root.unbind("<KeyRelease>")
-    for widget in root.winfo_children():
-        widget.destroy()
-
-    width = root.winfo_width()
-    height = root.winfo_height()
-    end_canvas = Canvas(root, width=width, height=height, bg="#202020", highlightthickness=0)
-    end_canvas.pack(fill="both", expand=True)
-    end_canvas.create_text(
-        width // 2,
-        height // 2 - 35,
-        text=winner_text,
-        fill="white",
-        font=("Calibri", 32, "bold"),
-    )
-    replay_button = Button(
-        root,
-        text="Replay",
-        font=("Calibri", 16, "bold"),
-        command=lambda: run_game(root, mode, player_names),
-    )
-    end_canvas.create_window(width // 2, height // 2 + 35, window=replay_button)
-
-
 def run_game(root, mode, player_names=None):
     """
     Macht: Baut das Spielfeld auf (Hintergrund, Baeume, Spieler) und startet die Spiel-Loop.
@@ -740,7 +708,15 @@ def run_game(root, mode, player_names=None):
             if move_channel is not None:
                 move_channel.fadeout(MOVE_SOUND_FADEOUT_MS)
             winner_text = f"{alive_players[0]['name']} gewinnt!" if alive_players else "Unentschieden!"
-            show_winner_screen(root, winner_text, mode, player_names)
+            for player_keys in PLAYER_KEYS.values():
+                root.unbind(f"<KeyPress-{player_keys['shoot']}>")
+            root.unbind("<KeyPress>")
+            root.unbind("<KeyRelease>")
+            show_winner_screen(
+                root,
+                winner_text,
+                lambda: run_game(root, mode, player_names),
+            )
             return
 
         root.after(DELAY, game_loop)
