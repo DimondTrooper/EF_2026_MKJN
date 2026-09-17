@@ -14,10 +14,13 @@ TANK_BASE_PATHS = {
 MUZZLE_FLASH_DIR = resource_path("Assets/Tank_Shoot_animation")
 MUZZLE_FLASH_FRAME_COUNT = 3
 
-HULL_PX = 44
-
-
+HULL_PX = 44  #einheitliche Rumpfbreite aller Panzerbilder im Spiel
 HULL_ROW_THRESHOLD = 0.6  #ab welchem Anteil der breitesten Zeile eine Zeile als Rumpf zaehlt
+
+#Aus einem geraden (0 Grad) und einem diagonalen (315 Grad) Basisbild entstehen
+#durch Drehen um 90-Grad-Schritte alle 8 Blickwinkel.
+QUARTER_TURNS = (0, 90, 180, 270)
+DIAGONAL_BASE_ANGLE = 315
 
 
 def _row_spans(img):
@@ -122,7 +125,7 @@ def _square_size_for(images):
     Macht: Berechnet die noetige quadratische Bildgroesse, damit nach dem
            Zentrieren auf den Rumpf nichts abgeschnitten wird.
     Input: images (Liste von (PIL-Bild, rotated_45))
-    Output: Groesse in Pixeln (ungerade Zahl vermeiden ist nicht noetig)
+    Output: Kantenlaenge in Pixeln
     """
     half = 0
     for img, rotated_45 in images:
@@ -147,30 +150,17 @@ def _center_hull_on_square(img, size, rotated_45):
     return canvas
 
 
-def _build_angle_set(base_straight_path, base_diagonal_path, target_size=None):
+def _all_angles(straight, diagonal):
     """
-    Macht: Baut aus einem geraden und einem 45-Grad-Basisbild alle 8 Drehwinkel.
-    Input: base_straight_path, base_diagonal_path (Dateipfade zu den Basisbildern),
-           target_size (optional: erzwungene quadratische Endgroesse in Pixeln,
-           z.B. damit ein Wrack gleich gross wie die vorangehende Explosion wirkt)
+    Macht: Dreht ein fertig zentriertes gerades und diagonales Bild in alle
+           8 Blickwinkel.
+    Input: straight, diagonal (quadratische PIL-Bilder)
     Output: Dict {winkel: ImageTk.PhotoImage}
     """
-    straight = _load_scaled(base_straight_path, rotated_45=False)
-    diagonal = _load_scaled(base_diagonal_path, rotated_45=True)
-
-    size = _square_size_for([(straight, False), (diagonal, True)])
-    straight = _center_hull_on_square(straight, size, rotated_45=False)
-    diagonal = _center_hull_on_square(diagonal, size, rotated_45=True)
-
-    if target_size is not None and target_size != size:
-        straight = straight.resize((target_size, target_size), Image.LANCZOS)
-        diagonal = diagonal.resize((target_size, target_size), Image.LANCZOS)
-
     images = {}
-    for step in (0, 90, 180, 270):
+    for step in QUARTER_TURNS:
         images[step] = ImageTk.PhotoImage(straight.rotate(step, expand=True))
-    for step in (0, 90, 180, 270):
-        images[(315 + step) % 360] = ImageTk.PhotoImage(diagonal.rotate(step, expand=True))
+        images[(DIAGONAL_BASE_ANGLE + step) % 360] = ImageTk.PhotoImage(diagonal.rotate(step, expand=True))
     return images
 
 
@@ -181,7 +171,14 @@ def get_tank_images(color="blue"):
     Output: Dict {winkel: ImageTk.PhotoImage}
     """
     base_straight, base_diagonal = TANK_BASE_PATHS[color]
-    return _build_angle_set(base_straight, base_diagonal)
+    straight = _load_scaled(base_straight, rotated_45=False)
+    diagonal = _load_scaled(base_diagonal, rotated_45=True)
+
+    size = _square_size_for([(straight, False), (diagonal, True)])
+    return _all_angles(
+        _center_hull_on_square(straight, size, rotated_45=False),
+        _center_hull_on_square(diagonal, size, rotated_45=True),
+    )
 
 
 DESTROYED_DIR = resource_path("Assets/Tank_Destroyed_animation")
@@ -242,16 +239,22 @@ def _fire_center(img):
 
 
 def _destroyed_frame_path(angle, frame_number):
+    """
+    Macht: Baut den Dateipfad zu einem Wrack-Frame.
+    Input: angle (Blickwinkel), frame_number (1 bis DESTROYED_FRAME_COUNT)
+    Output: Dateipfad (String)
+    """
     return f"{DESTROYED_DIR}/Tank_Destroyed_{DESTROYED_ANGLE_NAMES[angle]}{frame_number}.png"
 
 
 def get_destroyed_tank_frames():
     """
     Macht: Laedt die Animation des brennenden Wracks -- fuer jeden der 8
-           Blickwinkel die DESTROYED_FRAME_COUNT Einzelbilder. Alle Bilder
-           werden so ausgerichtet, dass die Rumpfmitte in der Bildmitte liegt;
-           dadurch erscheint das Wrack genau dort, wo der Panzer zerstoert
-           wurde, und wackelt waehrend der Animation nicht.
+           Blickwinkel die DESTROYED_FRAME_COUNT Einzelbilder. Die Bilder
+           werden am Feuer ausgerichtet, damit das Wrack ungefaehr dort liegt,
+           wo der Panzer zerstoert wurde. Da die Frames einzeln gezeichnet sind
+           und das Feuer flackert, kann das Wrack zwischen den Frames um ein
+           paar Pixel springen.
     Input: keine
     Output: Dict {winkel: Liste von ImageTk.PhotoImage}
     """
@@ -291,6 +294,11 @@ def get_destroyed_tank_frames():
 
 
 def _muzzle_flash_path(color, orientation, frame_number):
+    """
+    Macht: Baut den Dateipfad zu einem Muendungsfeuer-Frame.
+    Input: color (Panzerfarbe), orientation ("Straight"/"Diagonal"), frame_number (1..3)
+    Output: Dateipfad (String)
+    """
     return f"{MUZZLE_FLASH_DIR}/Tank_{color.capitalize()}_{orientation}_Mussleflash{frame_number}.png"
 
 
@@ -340,20 +348,14 @@ def get_muzzle_flash_frames(color="blue"):
         + [(frame, False) for frame in straight_bases]
         + [(frame, True) for frame in diagonal_bases]
     )
-    straight_bases = [_center_hull_on_square(frame, size, rotated_45=False) for frame in straight_bases]
-    diagonal_bases = [_center_hull_on_square(frame, size, rotated_45=True) for frame in diagonal_bases]
-
-    frames_by_angle = {}
-    for step in (0, 90, 180, 270):
-        frames_by_angle[step] = [
-            ImageTk.PhotoImage(base.rotate(step, expand=True)) for base in straight_bases
-        ]
-    for step in (0, 90, 180, 270):
-        frames_by_angle[(315 + step) % 360] = [
-            ImageTk.PhotoImage(base.rotate(step, expand=True)) for base in diagonal_bases
-        ]
-
-    return frames_by_angle
+    frames = [
+        _all_angles(
+            _center_hull_on_square(straight, size, rotated_45=False),
+            _center_hull_on_square(diagonal, size, rotated_45=True),
+        )
+        for straight, diagonal in zip(straight_bases, diagonal_bases)
+    ]
+    return {angle: [frame[angle] for frame in frames] for angle in frames[0]}
 
 
 if __name__ == "__main__":

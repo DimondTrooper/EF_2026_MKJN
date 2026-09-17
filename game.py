@@ -2,98 +2,87 @@ import os
 os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
 
 import math
+import random
 import time
+
 import pygame
 from tkinter import Button, Canvas
 from PIL import Image, ImageTk
+
 from build_tank_images import HULL_PX, get_destroyed_tank_frames, get_muzzle_flash_frames, get_tank_images
 from scoreboard import get_leaderboard, record_win, register_players
-from winner_screen import show_winner_screen
 from utils import resource_path
-import random
+from winner_screen import show_winner_screen
 
+# --- Bilder ---
 BACKGROUND_PATH = resource_path("Assets/Map_Hintergrund.png")
+TREE_IMAGE_PATHS = [resource_path("Assets/Tree_1.png"), resource_path("Assets/Tree_2.png")]
+TREE_TRUNK_PATH = resource_path("Assets/Tree_Trunk.png")
+MINE_IMAGE_PATH = resource_path("Assets/Mine.png")
+EXPLOSION_FRAME_DIR = resource_path("Assets/Tank_Explosion_Defeat")
+
+# --- Sounds ---
 SHOOT_SOUND_PATH = resource_path("Sounds/Shoot.wav")
 MOVE_SOUND_PATH = resource_path("Sounds/Tank_moving.wav")
-MOVE_SOUND_FADEOUT_MS = 300
-MOVE_SOUND_VOLUME = 0.25
 IDLE_TANK_SOUND_PATH = resource_path("Sounds/idle_Tank.wav")
+BREEZE_SOUND_PATH = resource_path("Sounds/Ambient_Sounds/breeze-tree.wav")
+DISTANT_EXPLOSION_SOUND_PATH = resource_path("Sounds/Ambient_Sounds/distant-explosions.wav")
+PLANE_SOUND_PATH = resource_path("Sounds/Ambient_Sounds/propeller-planewav.wav")
+
+MOVE_SOUND_VOLUME = 0.25
 IDLE_TANK_SOUND_VOLUME = 0.18
-AMBIENT_SOUND_PATHS = [
-    resource_path("Sounds/Ambient_Sounds/breeze-tree.wav"),
-    resource_path("Sounds/Ambient_Sounds/distant-explosions.wav"),
-    resource_path("Sounds/Ambient_Sounds/propeller-planewav.wav"),
-]
-AMBIENT_SOUND_VOLUME = 0.12
 BREEZE_SOUND_VOLUME = 0.28
+AMBIENT_SOUND_VOLUME = 0.12
+MOVE_SOUND_FADEOUT_MS = 300
+AMBIENT_SOUND_FADEOUT_MS = 800
 DISTANT_EXPLOSION_MIN_DELAY = 6
 DISTANT_EXPLOSION_MAX_DELAY = 12
 PLANE_MIN_DELAY = 35
 PLANE_MAX_DELAY = 60
-AMBIENT_SOUND_FADEOUT_MS = 800
 
-TREE_IMAGE_PATHS = [resource_path("Assets/Tree_1.png"), resource_path("Assets/Tree_2.png")]
-TREE_TRUNK_PATH = resource_path("Assets/Tree_Trunk.png")
+# --- Spielfeld ---
 TREE_SCALE = 0.8
 TREE_TRUNK_SIZE_RATIO = 0.5
 TREE_HITBOX_SCALE = 0.85
 OBSTACLE_MIN_COUNT = 7
 OBSTACLE_MAX_COUNT = 15
 
-# Panzer-Bilder sind quadratisch (gleiche Groesse in jeder Drehstufe), aber
-# je nach Drehung ist der sichtbare Panzer rautenfoermig statt rechteckig --
-# eine runde Hitbox passt sich dem viel besser an als das volle Quadrat.
-# Bezug ist die tatsaechliche Rumpfbreite (HULL_PX) und nicht die Bildflaeche:
-# die Bildflaeche enthaelt unterschiedlich viel leeren Rand und waere je nach
-# Panzerfarbe verschieden gross.
-TANK_HITBOX_SCALE = 1.15
-TANK_HITBOX_RADIUS = HULL_PX / 2 * TANK_HITBOX_SCALE
-
-MINE_IMAGE_PATH = resource_path("Assets/Mine.png")
 MINE_COUNT = 6
 MINE_DISPLAY_SIZE = 30
 MINE_HITBOX_SCALE = 0.8
 
+SPAWN_MARGIN = 60
+SPAWN_ATTEMPTS = 50
+MIN_PLAYER_SPAWN_DISTANCE = 200
+
+# Panzer und Wracks bekommen eine runde Hitbox (ein gedrehter Panzer ist eher
+# rautenfoermig als rechteckig). Bezug ist die echte Rumpfbreite HULL_PX und
+# nicht die Bildflaeche -- die enthaelt je nach Bild unterschiedlich viel
+# leeren Rand bzw. beim Wrack eine grosse Rauchwolke.
+HITBOX_SCALE = 1.15
+TANK_HITBOX_RADIUS = HULL_PX / 2 * HITBOX_SCALE
+
+# --- Animationen ---
 SHOOT_ANIMATION_FRAME_MS = 60
-EXPLOSION_FRAME_DIR = resource_path("Assets/Tank_Explosion_Defeat")
 EXPLOSION_FRAME_COUNT = 4
 EXPLOSION_FRAME_MS = 80
 EXPLOSION_DISPLAY_SIZE = 110
-WIN_SCREEN_DELAY_MS = 3000  # Pause nach Explosion/Wrack, bevor das Leaderboard erscheint
-# Wracks geben Deckung und blockieren wie Panzer/Baeume. Bezug ist wieder die
-# Rumpfbreite und nicht die Bildflaeche -- die Wrack-Bilder enthalten eine
-# grosse Rauchwolke, die sonst eine viel zu grosse Hitbox ergeben wuerde.
-WRECK_HITBOX_SCALE = 1.15
-WRECK_HITBOX_RADIUS = HULL_PX / 2 * WRECK_HITBOX_SCALE
 WRECK_FRAME_MS = 180  # Tempo der Rauch-Animation des brennenden Wracks
+WIN_SCREEN_DELAY_MS = 3000  # Pause nach Explosion/Wrack, bevor das Leaderboard erscheint
 
-pygame.mixer.init()
-pygame.mixer.set_num_channels(16)
-SHOOT_SOUND = pygame.mixer.Sound(SHOOT_SOUND_PATH)
-MOVE_SOUND = pygame.mixer.Sound(MOVE_SOUND_PATH)
-MOVE_SOUND.set_volume(MOVE_SOUND_VOLUME)
-IDLE_TANK_SOUND = pygame.mixer.Sound(IDLE_TANK_SOUND_PATH)
-IDLE_TANK_SOUND.set_volume(IDLE_TANK_SOUND_VOLUME)
-AMBIENT_SOUNDS = [pygame.mixer.Sound(path) for path in AMBIENT_SOUND_PATHS]
-AMBIENT_SOUNDS[0].set_volume(BREEZE_SOUND_VOLUME)
-AMBIENT_SOUNDS[1].set_volume(AMBIENT_SOUND_VOLUME)
-AMBIENT_SOUNDS[2].set_volume(AMBIENT_SOUND_VOLUME)
-
+# --- Steuerung ---
 SPEED = 1
 FPS = 60
 DELAY = int(1000 / FPS)
-
 ROTATE_COOLDOWN = 0.35  # Zeit (Sekunden) pro 45-Grad-Drehschritt, solange Drehen gehalten wird
-
-SPAWN_MARGIN = 60
-MIN_PLAYER_SPAWN_DISTANCE = 200
 
 SHOOT_COOLDOWN = 4
 PROJECTILE_SPEED = 8
 PROJECTILE_RADIUS = 4
 BARREL_OFFSET = 20
-RELOAD_RING_RADIUS = 6  #kleiner Nachlade-Ring neben dem Namensschild
-RELOAD_RING_GAP = 6  #Abstand zwischen Namenstext und Ring
+RELOAD_RING_RADIUS = 6  # kleiner Nachlade-Ring neben dem Namensschild
+RELOAD_RING_GAP = 6  # Abstand zwischen Namenstext und Ring
+NAME_TAG_GAP = 12  # Abstand zwischen Panzerbild und Namensschild
 
 ANGLE_STEPS = [0, 45, 90, 135, 180, 225, 270, 315]
 
@@ -123,6 +112,37 @@ PLAYER_COLORS = {
     3: "green",
 }
 
+PLAYER_NUMBERS_BY_MODE = {
+    "1 vs 1": [1, 2],
+    "1 vs 1 vs 1": [1, 2, 3],
+}
+
+
+def load_sound(path, volume=None):
+    """
+    Macht: Laedt einen Sound und stellt optional seine Lautstaerke ein.
+    Input: path (Dateipfad), volume (0.0 bis 1.0, optional)
+    Output: pygame.mixer.Sound
+    """
+    sound = pygame.mixer.Sound(path)
+    if volume is not None:
+        sound.set_volume(volume)
+    return sound
+
+
+pygame.mixer.init()
+pygame.mixer.set_num_channels(16)
+SHOOT_SOUND = load_sound(SHOOT_SOUND_PATH)
+MOVE_SOUND = load_sound(MOVE_SOUND_PATH, MOVE_SOUND_VOLUME)
+IDLE_TANK_SOUND = load_sound(IDLE_TANK_SOUND_PATH, IDLE_TANK_SOUND_VOLUME)
+BREEZE_SOUND = load_sound(BREEZE_SOUND_PATH, BREEZE_SOUND_VOLUME)
+DISTANT_EXPLOSION_SOUND = load_sound(DISTANT_EXPLOSION_SOUND_PATH, AMBIENT_SOUND_VOLUME)
+PLANE_SOUND = load_sound(PLANE_SOUND_PATH, AMBIENT_SOUND_VOLUME)
+
+
+# ============================================================================
+# Hilfsfunktionen: Mathematik und Kollision
+# ============================================================================
 
 def clamp(value, min_value, max_value):
     """
@@ -133,22 +153,141 @@ def clamp(value, min_value, max_value):
     return max(min_value, min(value, max_value))
 
 
-def random_spawn_position(width, height, avoid_boxes=None, half_w=0, half_h=0, max_attempts=50):
+def rects_overlap(a, b):
+    """
+    Macht: Prueft, ob sich zwei Rechtecke ueberschneiden.
+    Input: a, b (Rechtecke als x1, y1, x2, y2)
+    Output: True oder False
+    """
+    ax1, ay1, ax2, ay2 = a
+    bx1, by1, bx2, by2 = b
+    return not (ax2 < bx1 or ax1 > bx2 or ay2 < by1 or ay1 > by2)
+
+
+def circle_rect_overlap(cx, cy, radius, rect):
+    """
+    Macht: Prueft, ob sich ein Kreis und ein Rechteck ueberschneiden.
+    Input: cx, cy, radius (Kreis), rect (Rechteck als x1, y1, x2, y2)
+    Output: True oder False
+    """
+    rx1, ry1, rx2, ry2 = rect
+    dx = cx - clamp(cx, rx1, rx2)
+    dy = cy - clamp(cy, ry1, ry2)
+    return (dx * dx + dy * dy) <= radius * radius
+
+
+def circles_overlap(cx1, cy1, r1, cx2, cy2, r2):
+    """
+    Macht: Prueft, ob sich zwei Kreise ueberschneiden.
+    Input: cx1, cy1, r1 (erster Kreis), cx2, cy2, r2 (zweiter Kreis)
+    Output: True oder False
+    """
+    dx = cx1 - cx2
+    dy = cy1 - cy2
+    combined_radius = r1 + r2
+    return (dx * dx + dy * dy) <= combined_radius * combined_radius
+
+
+def circle_bounding_box(obj):
+    """
+    Macht: Liefert das umschliessende Rechteck eines runden Objekts.
+    Input: obj (Dict mit "cx", "cy", "radius")
+    Output: (x1, y1, x2, y2)
+    """
+    return (obj["cx"] - obj["radius"], obj["cy"] - obj["radius"],
+            obj["cx"] + obj["radius"], obj["cy"] + obj["radius"])
+
+
+def first_circle_hit(cx, cy, radius, objects):
+    """
+    Macht: Sucht das erste runde Objekt, das einen gegebenen Kreis beruehrt.
+    Input: cx, cy, radius (Kreis), objects (Liste von Dicts mit "cx", "cy", "radius")
+    Output: das getroffene Objekt oder None
+    """
+    return next(
+        (obj for obj in objects if circles_overlap(cx, cy, radius, obj["cx"], obj["cy"], obj["radius"])),
+        None,
+    )
+
+
+def first_rect_hit(rect, objects):
+    """
+    Macht: Sucht das erste runde Objekt, das ein Rechteck (z.B. ein Projektil) beruehrt.
+    Input: rect (x1, y1, x2, y2), objects (Liste von Dicts mit "cx", "cy", "radius")
+    Output: das getroffene Objekt oder None
+    """
+    return next(
+        (obj for obj in objects if circle_rect_overlap(obj["cx"], obj["cy"], obj["radius"], rect)),
+        None,
+    )
+
+
+def random_spawn_position(width, height, avoid_boxes=None, half_w=0, half_h=0):
     """
     Macht: Sucht eine zufaellige Position im Spielfeld, die keine der avoid_boxes ueberlappt.
     Input: width, height (Spielfeldgroesse), avoid_boxes (Liste von Rechtecken, optional),
-           half_w, half_h (halbe Groesse des zu platzierenden Objekts), max_attempts (Zahl)
+           half_w, half_h (halbe Groesse des zu platzierenden Objekts)
     Output: (x, y) -- eine Position im Spielfeld
     """
-    for _ in range(max_attempts):
+    for _ in range(SPAWN_ATTEMPTS):
         x = random.randint(SPAWN_MARGIN, width - SPAWN_MARGIN)
         y = random.randint(SPAWN_MARGIN, height - SPAWN_MARGIN)
-        if not avoid_boxes:
-            return x, y
         candidate_box = (x - half_w, y - half_h, x + half_w, y + half_h)
-        if not any(rects_overlap(candidate_box, box) for box in avoid_boxes):
+        if not avoid_boxes or not any(rects_overlap(candidate_box, box) for box in avoid_boxes):
             return x, y
     return x, y
+
+
+def pick_tank_spawns(count, width, height, avoid_boxes, half_size):
+    """
+    Macht: Sucht Startpositionen fuer die Panzer -- frei von Baeumen/Minen und
+           moeglichst mit Mindestabstand zueinander.
+    Input: count (Anzahl Panzer), width, height (Spielfeldgroesse),
+           avoid_boxes (Rechtecke, die gemieden werden), half_size (halbe Panzergroesse)
+    Output: Liste von (x, y)
+    """
+    spawns = []
+    for _ in range(count):
+        for _ in range(SPAWN_ATTEMPTS):
+            x, y = random_spawn_position(width, height, avoid_boxes, half_size, half_size)
+            if all(math.hypot(x - px, y - py) >= MIN_PLAYER_SPAWN_DISTANCE for px, py in spawns):
+                break
+        spawns.append((x, y))
+    return spawns
+
+
+# ============================================================================
+# Bilder und Sounds laden
+# ============================================================================
+
+def scale_image(img, factor):
+    """
+    Macht: Vergroessert/verkleinert ein PIL-Bild um einen Faktor.
+    Input: img (PIL-Bild), factor (Zahl)
+    Output: PIL-Bild
+    """
+    new_size = (max(1, round(img.width * factor)), max(1, round(img.height * factor)))
+    return img.resize(new_size, Image.LANCZOS)
+
+
+def longest_side_factor(img, target_size):
+    """
+    Macht: Berechnet den Faktor, mit dem die laengere Bildseite target_size lang wird.
+    Input: img (PIL-Bild), target_size (Zielgroesse in Pixeln)
+    Output: Zahl
+    """
+    return target_size / max(img.width, img.height)
+
+
+def center_on_square(img, size):
+    """
+    Macht: Legt ein Bild mittig auf eine quadratische, transparente Flaeche.
+    Input: img (PIL-Bild), size (Kantenlaenge)
+    Output: PIL-Bild (size x size)
+    """
+    square = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    square.paste(img, ((size - img.width) // 2, (size - img.height) // 2), img)
+    return square
 
 
 def load_tree_photo(path):
@@ -157,84 +296,18 @@ def load_tree_photo(path):
     Input: path (Dateipfad zu einem Baumbild)
     Output: ImageTk.PhotoImage
     """
-    img = Image.open(path)
-    new_size = (round(img.width * TREE_SCALE), round(img.height * TREE_SCALE))
-    return ImageTk.PhotoImage(img.resize(new_size))
+    img = Image.open(path).convert("RGBA")
+    return ImageTk.PhotoImage(scale_image(img, TREE_SCALE))
 
 
 def load_image_scaled_to(path, target_size):
     """
-    Macht: Laedt ein Bild und skaliert es so, dass seine groessere Seite target_size misst.
+    Macht: Laedt ein Bild und skaliert es so, dass seine laengere Seite target_size misst.
     Input: path (Dateipfad zu einem Bild), target_size (Zielgroesse in Pixeln)
     Output: ImageTk.PhotoImage
     """
-    img = Image.open(path)
-    scale = target_size / max(img.width, img.height)
-    new_size = (round(img.width * scale), round(img.height * scale))
-    return ImageTk.PhotoImage(img.resize(new_size))
-
-
-def load_explosion_frames():
-    """
-    Macht: Laedt die Explosionsframes und zentriert sie auf einer gleich grossen Bildflaeche.
-    Input: keine
-    Output: Liste von ImageTk.PhotoImage
-    """
-    source_frames = [
-        Image.open(f"{EXPLOSION_FRAME_DIR}/Explosion_{number}.png").convert("RGBA")
-        for number in range(1, EXPLOSION_FRAME_COUNT + 1)
-    ]
-    scale = EXPLOSION_DISPLAY_SIZE / max(max(frame.width, frame.height) for frame in source_frames)
-    frames = []
-    for frame in source_frames:
-        resized = frame.resize((round(frame.width * scale), round(frame.height * scale)), Image.LANCZOS)
-        centered = Image.new("RGBA", (EXPLOSION_DISPLAY_SIZE, EXPLOSION_DISPLAY_SIZE), (0, 0, 0, 0))
-        offset = ((EXPLOSION_DISPLAY_SIZE - resized.width) // 2, (EXPLOSION_DISPLAY_SIZE - resized.height) // 2)
-        centered.paste(resized, offset, resized)
-        frames.append(ImageTk.PhotoImage(centered))
-    return frames
-
-
-def start_ambient_sounds():
-    """
-    Macht: Startet den Wind als Loop und plant Flugzeug sowie entfernte Explosionen.
-    Input: keine
-    Output: Dict mit Sound-Kanaelen und naechsten Abspielzeiten
-    """
-    now = time.time()
-    return {
-        "channels": [AMBIENT_SOUNDS[0].play(loops=-1)],
-        "next_explosion_time": now + random.uniform(DISTANT_EXPLOSION_MIN_DELAY, DISTANT_EXPLOSION_MAX_DELAY),
-        "next_plane_time": now + random.uniform(PLANE_MIN_DELAY, PLANE_MAX_DELAY),
-    }
-
-
-def update_ambient_sounds(ambient_state):
-    """
-    Macht: Spielt entfernte Explosionen haeufig und Flugzeuge selten ab.
-    Input: ambient_state (Dict mit Sound-Kanaelen und Abspielzeiten)
-    Output: kein Rueckgabewert
-    """
-    now = time.time()
-    if now >= ambient_state["next_explosion_time"]:
-        ambient_state["channels"].append(AMBIENT_SOUNDS[1].play())
-        ambient_state["next_explosion_time"] = now + random.uniform(
-            DISTANT_EXPLOSION_MIN_DELAY, DISTANT_EXPLOSION_MAX_DELAY
-        )
-    if now >= ambient_state["next_plane_time"]:
-        ambient_state["channels"].append(AMBIENT_SOUNDS[2].play())
-        ambient_state["next_plane_time"] = now + random.uniform(PLANE_MIN_DELAY, PLANE_MAX_DELAY)
-
-
-def stop_ambient_sounds(ambient_state):
-    """
-    Macht: Blendet laufende Hintergrundsounds aus.
-    Input: ambient_state (Dict mit pygame-Mixer-Kanaelen)
-    Output: kein Rueckgabewert
-    """
-    for channel in ambient_state["channels"]:
-        if channel is not None:
-            channel.fadeout(AMBIENT_SOUND_FADEOUT_MS)
+    img = Image.open(path).convert("RGBA")
+    return ImageTk.PhotoImage(scale_image(img, longest_side_factor(img, target_size)))
 
 
 def load_mine_photo():
@@ -246,9 +319,119 @@ def load_mine_photo():
     """
     img = Image.open(MINE_IMAGE_PATH).convert("RGBA")
     img = img.crop(img.getbbox())
-    scale = MINE_DISPLAY_SIZE / max(img.width, img.height)
-    new_size = (round(img.width * scale), round(img.height * scale))
-    return ImageTk.PhotoImage(img.resize(new_size))
+    return ImageTk.PhotoImage(scale_image(img, longest_side_factor(img, MINE_DISPLAY_SIZE)))
+
+
+def load_explosion_frames():
+    """
+    Macht: Laedt die Explosionsframes. Alle Frames werden mit demselben Faktor
+           skaliert (damit die Explosion gleichmaessig waechst) und mittig auf
+           eine gleich grosse Flaeche gelegt.
+    Input: keine
+    Output: Liste von ImageTk.PhotoImage
+    """
+    source_frames = [
+        Image.open(f"{EXPLOSION_FRAME_DIR}/Explosion_{number}.png").convert("RGBA")
+        for number in range(1, EXPLOSION_FRAME_COUNT + 1)
+    ]
+    factor = min(longest_side_factor(frame, EXPLOSION_DISPLAY_SIZE) for frame in source_frames)
+    return [
+        ImageTk.PhotoImage(center_on_square(scale_image(frame, factor), EXPLOSION_DISPLAY_SIZE))
+        for frame in source_frames
+    ]
+
+
+def start_match_sounds():
+    """
+    Macht: Startet Leerlauf-Brummen und Wind als Loop und plant Flugzeug sowie
+           entfernte Explosionen.
+    Input: keine
+    Output: Dict mit Sound-Kanaelen und naechsten Abspielzeiten
+    """
+    now = time.time()
+    return {
+        "move": None,
+        "idle": IDLE_TANK_SOUND.play(loops=-1),
+        "ambient": [BREEZE_SOUND.play(loops=-1)],
+        "next_explosion_time": now + random.uniform(DISTANT_EXPLOSION_MIN_DELAY, DISTANT_EXPLOSION_MAX_DELAY),
+        "next_plane_time": now + random.uniform(PLANE_MIN_DELAY, PLANE_MAX_DELAY),
+    }
+
+
+def update_ambient_sounds(sounds):
+    """
+    Macht: Spielt entfernte Explosionen haeufig und Flugzeuge selten ab.
+    Input: sounds (Dict aus start_match_sounds)
+    Output: kein Rueckgabewert
+    """
+    now = time.time()
+    if now >= sounds["next_explosion_time"]:
+        sounds["ambient"].append(DISTANT_EXPLOSION_SOUND.play())
+        sounds["next_explosion_time"] = now + random.uniform(DISTANT_EXPLOSION_MIN_DELAY, DISTANT_EXPLOSION_MAX_DELAY)
+    if now >= sounds["next_plane_time"]:
+        sounds["ambient"].append(PLANE_SOUND.play())
+        sounds["next_plane_time"] = now + random.uniform(PLANE_MIN_DELAY, PLANE_MAX_DELAY)
+
+
+def update_move_sound(sounds, players):
+    """
+    Macht: Spielt das Fahrgeraeusch, solange sich mindestens ein Panzer bewegt.
+    Input: sounds (Dict aus start_match_sounds), players (Liste aller Spieler)
+    Output: kein Rueckgabewert
+    """
+    any_moving = any(player["moving"] for player in players)
+    if any_moving and sounds["move"] is None:
+        sounds["move"] = MOVE_SOUND.play(loops=-1)
+    elif not any_moving and sounds["move"] is not None:
+        sounds["move"].fadeout(MOVE_SOUND_FADEOUT_MS)
+        sounds["move"] = None
+
+
+def stop_match_sounds(sounds):
+    """
+    Macht: Blendet alle Sounds der Partie aus.
+    Input: sounds (Dict aus start_match_sounds)
+    Output: kein Rueckgabewert
+    """
+    for channel in (sounds["move"], sounds["idle"]):
+        if channel is not None:
+            channel.fadeout(MOVE_SOUND_FADEOUT_MS)
+    for channel in sounds["ambient"]:
+        if channel is not None:
+            channel.fadeout(AMBIENT_SOUND_FADEOUT_MS)
+
+
+# ============================================================================
+# Spielfeld aufbauen
+# ============================================================================
+
+def create_background(root, width, height):
+    """
+    Macht: Erstellt die Zeichenflaeche des Spiels mit dem Kartenbild.
+    Input: root (Tk-Fenster), width, height (Spielfeldgroesse)
+    Output: Canvas
+    """
+    canvas = Canvas(root, width=width, height=height, bg="darkgreen")
+    canvas.pack()
+    canvas.background_photo = ImageTk.PhotoImage(Image.open(BACKGROUND_PATH).resize((width, height)))
+    canvas.create_image(0, 0, anchor="nw", image=canvas.background_photo)
+    return canvas
+
+
+def spawn_trees(canvas, width, height, tree_photos):
+    """
+    Macht: Platziert eine zufaellige Anzahl Baeume im Spielfeld.
+    Input: canvas, width, height (Spielfeldgroesse), tree_photos (Liste von Baumbildern)
+    Output: Liste von Baum-Dicts {"id", "cx", "cy", "radius"}
+    """
+    trees = []
+    for _ in range(random.randint(OBSTACLE_MIN_COUNT, OBSTACLE_MAX_COUNT)):
+        x, y = random_spawn_position(width, height)
+        tree_id = canvas.create_image(x, y, image=random.choice(tree_photos))
+        box = canvas.bbox(tree_id)
+        radius = min(box[2] - box[0], box[3] - box[1]) / 2 * TREE_HITBOX_SCALE
+        trees.append({"id": tree_id, "cx": x, "cy": y, "radius": radius})
+    return trees
 
 
 def spawn_mines(canvas, width, height, mine_photo, avoid_boxes):
@@ -268,97 +451,74 @@ def spawn_mines(canvas, width, height, mine_photo, avoid_boxes):
     return mines
 
 
-def circle_rect_overlap(cx, cy, radius, rect):
+def build_world(root):
     """
-    Macht: Prueft, ob sich ein Kreis und ein Rechteck ueberschneiden.
-    Input: cx, cy, radius (Kreis), rect (Rechteck als x1, y1, x2, y2)
-    Output: True oder False
+    Macht: Baut das Spielfeld auf (Karte, Baeume, Minen) und laedt alle Bilder,
+           die waehrend der Partie gebraucht werden. Die Bilder werden am
+           Canvas bzw. im Dict gespeichert, damit Tkinter sie nicht loescht.
+    Input: root (Tk-Fenster)
+    Output: world (Dict mit allem, was zum Spielfeld gehoert)
     """
-    rx1, ry1, rx2, ry2 = rect
-    closest_x = clamp(cx, rx1, rx2)
-    closest_y = clamp(cy, ry1, ry2)
-    dx = cx - closest_x
-    dy = cy - closest_y
-    return (dx * dx + dy * dy) <= radius * radius
+    width = root.winfo_width()
+    height = root.winfo_height()
+    canvas = create_background(root, width, height)
+
+    tree_photos = [load_tree_photo(path) for path in TREE_IMAGE_PATHS]
+    trees = spawn_trees(canvas, width, height, tree_photos)
+    avg_tree_size = sum(max(photo.width(), photo.height()) for photo in tree_photos) / len(tree_photos)
+    mine_photo = load_mine_photo()
+    mines = spawn_mines(canvas, width, height, mine_photo, [circle_bounding_box(tree) for tree in trees])
+
+    return {
+        "canvas": canvas,
+        "width": width,
+        "height": height,
+        "tree_photos": tree_photos,
+        "trunk_photo": load_image_scaled_to(TREE_TRUNK_PATH, avg_tree_size * TREE_TRUNK_SIZE_RATIO),
+        "mine_photo": mine_photo,
+        "explosion_frames": load_explosion_frames(),
+        "destroyed_frames": get_destroyed_tank_frames(),
+        "trees": trees,
+        "mines": mines,
+        "wrecks": [],
+    }
 
 
-def circles_overlap(cx1, cy1, r1, cx2, cy2, r2):
+# ============================================================================
+# Spieler
+# ============================================================================
+
+def reload_ring_box(canvas, name_tag):
     """
-    Macht: Prueft, ob sich zwei Kreise ueberschneiden.
-    Input: cx1, cy1, r1 (erster Kreis), cx2, cy2, r2 (zweiter Kreis)
-    Output: True oder False
+    Macht: Berechnet die Position des Nachlade-Rings rechts neben dem Namensschild.
+    Input: canvas, name_tag (Canvas-Id des Namensschilds)
+    Output: (x1, y1, x2, y2) des Rings
     """
-    dx = cx1 - cx2
-    dy = cy1 - cy2
-    combined_radius = r1 + r2
-    return (dx * dx + dy * dy) <= combined_radius * combined_radius
+    _, top, right, bottom = canvas.bbox(name_tag)
+    center_x = right + RELOAD_RING_GAP + RELOAD_RING_RADIUS
+    center_y = (top + bottom) / 2
+    return (center_x - RELOAD_RING_RADIUS, center_y - RELOAD_RING_RADIUS,
+            center_x + RELOAD_RING_RADIUS, center_y + RELOAD_RING_RADIUS)
 
 
-def tank_hit_circle(canvas, player):
+def create_player(root, canvas, name, keys, tank_images, muzzle_flash_frames, start):
     """
-    Macht: Ermittelt Mittelpunkt und Radius der runden Hitbox eines Panzers.
-    Input: canvas, player (Spieler-Dict)
-    Output: (cx, cy, radius)
-    """
-    x, y = canvas.coords(player["tank"])
-    return x, y, TANK_HITBOX_RADIUS
-
-
-def spawn_obstacles(canvas, width, height, tree_photos):
-    """
-    Macht: Platziert eine zufaellige Anzahl Baeume im Spielfeld.
-    Input: canvas, width, height (Spielfeldgroesse), tree_photos (Liste von Baumbildern)
-    Output: Liste von Baum-Dicts {"id", "cx", "cy", "radius"}
-    """
-    count = random.randint(OBSTACLE_MIN_COUNT, OBSTACLE_MAX_COUNT)
-    obstacles = []
-    for _ in range(count):
-        x, y = random_spawn_position(width, height)
-        photo = random.choice(tree_photos)
-        tree_id = canvas.create_image(x, y, image=photo)
-        box = canvas.bbox(tree_id)
-        radius = min(box[2] - box[0], box[3] - box[1]) / 2 * TREE_HITBOX_SCALE
-        obstacles.append({"id": tree_id, "cx": x, "cy": y, "radius": radius})
-    return obstacles
-
-
-def rects_overlap(a, b):
-    """
-    Macht: Prueft, ob sich zwei Rechtecke ueberschneiden.
-    Input: a, b (Rechtecke als x1, y1, x2, y2)
-    Output: True oder False
-    """
-    ax1, ay1, ax2, ay2 = a
-    bx1, by1, bx2, by2 = b
-    return not (ax2 < bx1 or ax1 > bx2 or ay2 < by1 or ay1 > by2)
-
-
-def create_player(root, canvas, name, keys, tank_images, muzzle_flash_frames, start_x, start_y):
-    """
-    Macht: Erstellt einen neuen Spieler samt Panzer-Bild und Schuss-Tastenbindung.
+    Macht: Erstellt einen neuen Spieler samt Panzer-Bild, Namensschild,
+           Nachlade-Ring und Schuss-Tastenbindung.
     Input: root (Tk-Fenster), canvas, name (Spielername), keys (Tastenbelegung),
            tank_images (Dict mit Panzerbildern), muzzle_flash_frames (Dict mit Schussbildern),
-           start_x, start_y (Startposition)
+           start ((x, y) Startposition)
     Output: player (Dict mit allen Spielerdaten)
     """
-
+    start_x, start_y = start
     tank = canvas.create_image(start_x, start_y, image=tank_images[0])
     name_tag = canvas.create_text(
-        start_x,
-        start_y - tank_images[0].height() // 2 - 12,
-        text=name,
-        fill="white",
-        font=("Calibri", 12, "bold"),
+        start_x, start_y - tank_images[0].height() // 2 - NAME_TAG_GAP,
+        text=name, fill="white", font=("Calibri", 12, "bold"),
     )
-
-    r = RELOAD_RING_RADIUS
-    _, name_top, name_right, name_bottom = canvas.bbox(name_tag)
-    ring_cx = name_right + RELOAD_RING_GAP + r
-    ring_cy = (name_top + name_bottom) / 2
     reload_ring = canvas.create_arc(
-        ring_cx - r, ring_cy - r, ring_cx + r, ring_cy + r,
-        start=90, extent=0, style="arc", outline="gray", width=2,
-        state="hidden",
+        *reload_ring_box(canvas, name_tag),
+        start=90, extent=0, style="arc", outline="gray", width=2, state="hidden",
     )
 
     player = {
@@ -369,8 +529,7 @@ def create_player(root, canvas, name, keys, tank_images, muzzle_flash_frames, st
         "alive": True,
         "moving": False,
         "tank_images": tank_images,
-        "tank_width": tank_images[0].width(),
-        "tank_height": tank_images[0].height(),
+        "half_size": tank_images[0].width() // 2,
         "keys": keys,
         "muzzle_flash_frames": muzzle_flash_frames,
         "state": {
@@ -381,45 +540,71 @@ def create_player(root, canvas, name, keys, tank_images, muzzle_flash_frames, st
         "projectiles": [],
         "shoot_animation": None,
         "explosion": None,
-        "wreck": None,
     }
-
-    def on_shoot(event):
-        """
-        Macht: Feuert einen Schuss ab, falls der Spieler lebt und der Cooldown abgelaufen ist,
-               und startet die Schuss-Animation am Rohrende.
-        Input: event (Tkinter-Tastenereignis)
-        Output: kein Rueckgabewert
-        """
-        if not player["alive"]:
-            return
-        state = player["state"]
-        now = time.time()
-        if now - state["last_shot_time"] < SHOOT_COOLDOWN:
-            return
-        state["last_shot_time"] = now
-
-        x, y = canvas.coords(tank)
-        dx, dy = ANGLE_TO_VECTOR[state["angle"]]
-        start_bx = x + dx * BARREL_OFFSET
-        start_by = y + dy * BARREL_OFFSET
-        bullet = canvas.create_oval(
-            start_bx - PROJECTILE_RADIUS, start_by - PROJECTILE_RADIUS,
-            start_bx + PROJECTILE_RADIUS, start_by + PROJECTILE_RADIUS,
-            fill="black",
-        )
-        player["projectiles"].append({"id": bullet, "dx": dx, "dy": dy})
-        SHOOT_SOUND.play()
-
-        player["shoot_animation"] = {
-            "frame": 0,
-            "next_frame_time": now + SHOOT_ANIMATION_FRAME_MS / 1000,
-        }
-        show_tank_image(canvas, player)
-
-    root.bind(f"<KeyPress-{keys['shoot']}>", on_shoot)
-
+    root.bind(f"<KeyPress-{keys['shoot']}>", lambda event: fire_bullet(canvas, player))
     return player
+
+
+def create_players(root, world, mode, player_names):
+    """
+    Macht: Laedt die Panzerbilder und erstellt alle Spieler des Spielmodus an
+           freien Startpositionen.
+    Input: root (Tk-Fenster), world (Spielfeld-Dict), mode (Spielmodus),
+           player_names (Liste der Spielernamen)
+    Output: Liste der Spieler-Dicts
+    """
+    numbers = PLAYER_NUMBERS_BY_MODE[mode]
+    images = {n: get_tank_images(PLAYER_COLORS[n]) for n in numbers}
+    half_size = images[numbers[0]][0].width() // 2
+    avoid_boxes = [circle_bounding_box(obj) for obj in world["trees"] + world["mines"]]
+    spawns = pick_tank_spawns(len(numbers), world["width"], world["height"], avoid_boxes, half_size)
+
+    return [
+        create_player(
+            root, world["canvas"], name, PLAYER_KEYS[number], images[number],
+            get_muzzle_flash_frames(PLAYER_COLORS[number]), spawn,
+        )
+        for number, name, spawn in zip(numbers, player_names, spawns)
+    ]
+
+
+def fire_bullet(canvas, player):
+    """
+    Macht: Feuert einen Schuss ab, falls der Spieler lebt und der Cooldown
+           abgelaufen ist, und startet die Schuss-Animation am Rohrende.
+    Input: canvas, player (Spieler-Dict)
+    Output: kein Rueckgabewert
+    """
+    state = player["state"]
+    now = time.time()
+    if not player["alive"] or now - state["last_shot_time"] < SHOOT_COOLDOWN:
+        return
+    state["last_shot_time"] = now
+
+    x, y = canvas.coords(player["tank"])
+    dx, dy = ANGLE_TO_VECTOR[state["angle"]]
+    bullet_x = x + dx * BARREL_OFFSET
+    bullet_y = y + dy * BARREL_OFFSET
+    bullet = canvas.create_oval(
+        bullet_x - PROJECTILE_RADIUS, bullet_y - PROJECTILE_RADIUS,
+        bullet_x + PROJECTILE_RADIUS, bullet_y + PROJECTILE_RADIUS,
+        fill="black",
+    )
+    player["projectiles"].append({"id": bullet, "dx": dx, "dy": dy})
+    SHOOT_SOUND.play()
+
+    player["shoot_animation"] = {"frame": 0, "next_frame_time": now + SHOOT_ANIMATION_FRAME_MS / 1000}
+    show_tank_image(canvas, player)
+
+
+def tank_circle(canvas, player):
+    """
+    Macht: Liefert die runde Hitbox eines Panzers.
+    Input: canvas, player (Spieler-Dict)
+    Output: Dict {"cx", "cy", "radius"}
+    """
+    x, y = canvas.coords(player["tank"])
+    return {"cx": x, "cy": y, "radius": TANK_HITBOX_RADIUS}
 
 
 def show_tank_image(canvas, player):
@@ -437,28 +622,31 @@ def show_tank_image(canvas, player):
     canvas.itemconfig(player["tank"], image=image)
 
 
-def destroy_player(canvas, player, explosion_frames):
+def destroy_player(world, player):
     """
     Macht: Entfernt einen Panzer und startet seine Explosionsanimation an derselben Position.
-    Input: canvas, player (Spieler-Dict), explosion_frames (Liste von Explosionsbildern)
+    Input: world (Spielfeld-Dict), player (Spieler-Dict)
     Output: kein Rueckgabewert
     """
     if not player["alive"]:
         return
+    canvas = world["canvas"]
     x, y = canvas.coords(player["tank"])
-    canvas.delete(player["tank"])
-    canvas.delete(player["name_tag"])
-    canvas.delete(player["reload_ring"])
-    explosion_id = canvas.create_image(x, y, image=explosion_frames[0])
+    for item in (player["tank"], player["name_tag"], player["reload_ring"]):
+        canvas.delete(item)
     player["alive"] = False
     player["moving"] = False
     player["shoot_animation"] = None
     player["explosion"] = {
-        "id": explosion_id,
+        "id": canvas.create_image(x, y, image=world["explosion_frames"][0]),
         "frame": 0,
         "next_frame_time": time.time() + EXPLOSION_FRAME_MS / 1000,
     }
 
+
+# ============================================================================
+# Pro Frame: Spieler aktualisieren
+# ============================================================================
 
 def read_movement_keys(keys, keys_pressed):
     """
@@ -466,11 +654,7 @@ def read_movement_keys(keys, keys_pressed):
     Input: keys (Tastenbelegung eines Spielers), keys_pressed (Menge aktuell gedrueckter Tasten)
     Output: (forward, backward, turn_left, turn_right) -- alles Bool
     """
-    forward = keys["up"] in keys_pressed
-    backward = keys["down"] in keys_pressed
-    turn_left = keys["left"] in keys_pressed
-    turn_right = keys["right"] in keys_pressed
-    return forward, backward, turn_left, turn_right
+    return tuple(keys[direction] in keys_pressed for direction in ("up", "down", "left", "right"))
 
 
 def update_rotation(canvas, player, turn_left, turn_right):
@@ -489,108 +673,103 @@ def update_rotation(canvas, player, turn_left, turn_right):
         return
 
     state["last_rotate_time"] = now
-    i_current = ANGLE_STEPS.index(state["angle"])
     step = 1 if turn_left else -1
-    state["angle"] = ANGLE_STEPS[(i_current + step) % len(ANGLE_STEPS)]
+    state["angle"] = ANGLE_STEPS[(ANGLE_STEPS.index(state["angle"]) + step) % len(ANGLE_STEPS)]
     show_tank_image(canvas, player)
-    player["tank_width"] = player["tank_images"][state["angle"]].width()
-    player["tank_height"] = player["tank_images"][state["angle"]].height()
 
 
-def move_tank(canvas, player, forward, backward, width, height, obstacles, other_players, mines, explosion_frames, wrecks):
+def move_tank(world, player, forward, backward, other_players):
     """
     Macht: Bewegt den Panzer in (bei Rueckwaertsfahrt: entgegen) seiner
-           aktuellen Blickrichtung, sofern die Zielposition frei von Baeumen,
-           Wracks und anderen (lebenden) Panzern ist. Faehrt der Panzer auf
-           eine Mine, stirbt er und die Mine wird entfernt.
-    Input: canvas, player, forward, backward (Bool), width, height (Spielfeldgroesse),
-           obstacles (Liste von Baeumen), other_players (Liste der uebrigen Spieler),
-           mines (Liste der Minen), explosion_frames (Liste von Explosionsbildern),
-           wrecks (Liste zerstoerter Panzer, die Deckung geben)
-    Output: kein Rueckgabewert
+           Blickrichtung, sofern die Zielposition frei von Baeumen, Wracks und
+           anderen lebenden Panzern ist.
+    Input: world (Spielfeld-Dict), player, forward, backward (Bool),
+           other_players (Liste der uebrigen Spieler)
+    Output: (x, y) der neuen Position oder None, falls sich nichts bewegt hat
     """
     player["moving"] = False
     if forward == backward:
-        return  # keine oder beide Tasten gedrueckt -> keine Bewegung
+        return None  # keine oder beide Tasten gedrueckt -> keine Bewegung
 
+    canvas = world["canvas"]
     vx, vy = ANGLE_TO_VECTOR[player["state"]["angle"]]
     direction = 1 if forward else -1
-    dx = vx * SPEED * direction
-    dy = vy * SPEED * direction
-
     x, y = canvas.coords(player["tank"])
-    half_w = player["tank_width"] // 2
-    half_h = player["tank_height"] // 2
-    new_x = clamp(x + dx, half_w, width - half_w)
-    new_y = clamp(y + dy, half_h, height - half_h)
-    new_radius = TANK_HITBOX_RADIUS
+    half = player["half_size"]
+    new_x = clamp(x + vx * SPEED * direction, half, world["width"] - half)
+    new_y = clamp(y + vy * SPEED * direction, half, world["height"] - half)
 
-    blocked_by_tree = any(
-        circles_overlap(new_x, new_y, new_radius, tree["cx"], tree["cy"], tree["radius"])
-        for tree in obstacles
-    )
-    blocked_by_wreck = any(
-        circles_overlap(new_x, new_y, new_radius, wreck["cx"], wreck["cy"], wreck["radius"])
-        for wreck in wrecks
-    )
-    blocked_by_tank = any(
-        circles_overlap(new_x, new_y, new_radius, *tank_hit_circle(canvas, other))
-        for other in other_players
-        if other["alive"]
-    )
-    if blocked_by_tree or blocked_by_wreck or blocked_by_tank:
-        return
+    blockers = world["trees"] + world["wrecks"] + [tank_circle(canvas, other) for other in other_players if other["alive"]]
+    if first_circle_hit(new_x, new_y, TANK_HITBOX_RADIUS, blockers) is not None:
+        return None
 
     canvas.move(player["tank"], new_x - x, new_y - y)
     canvas.move(player["name_tag"], new_x - x, new_y - y)
     player["moving"] = True
-
-    hit_mine = next(
-        (mine for mine in mines if circles_overlap(new_x, new_y, new_radius, mine["cx"], mine["cy"], mine["radius"])),
-        None,
-    )
-    if hit_mine is not None:
-        canvas.delete(hit_mine["id"])
-        mines.remove(hit_mine)
-        destroy_player(canvas, player, explosion_frames)
+    return new_x, new_y
 
 
-def update_projectiles(canvas, player, obstacles, trunk_photo, width, height, wrecks):
+def trigger_mine(world, player, position):
     """
-    Macht: Bewegt die Projektile eines Spielers weiter und entfernt sie bei
-           Baum-Treffer, Wrack-Treffer (Deckung) oder beim Verlassen des
-           Spielfelds. Ein Wrack wird dabei nicht zerstoert, nur der Schuss.
-    Input: canvas, player, obstacles (Baeume), trunk_photo (Stumpf-Bild),
-           width, height (Spielfeldgroesse), wrecks (Liste zerstoerter Panzer)
+    Macht: Laesst eine Mine hochgehen, wenn der Panzer auf ihr steht: die Mine
+           verschwindet und der Panzer wird zerstoert.
+    Input: world (Spielfeld-Dict), player (Spieler-Dict), position ((x, y) des Panzers)
     Output: kein Rueckgabewert
     """
-    for p in player["projectiles"][:]:
-        canvas.move(p["id"], p["dx"] * PROJECTILE_SPEED, p["dy"] * PROJECTILE_SPEED)
-        bullet_box = canvas.coords(p["id"])
-        x1, y1, x2, y2 = bullet_box
-
-        hit_tree = next(
-            (tree for tree in obstacles if circle_rect_overlap(tree["cx"], tree["cy"], tree["radius"], bullet_box)),
-            None,
-        )
-        if hit_tree is not None:
-            canvas.itemconfig(hit_tree["id"], image=trunk_photo)
-            obstacles.remove(hit_tree)
-
-        hit_wreck = any(
-            circle_rect_overlap(wreck["cx"], wreck["cy"], wreck["radius"], bullet_box) for wreck in wrecks
-        )
-
-        left_field = x2 < 0 or x1 > width or y2 < 0 or y1 > height
-        if left_field or hit_tree is not None or hit_wreck:
-            canvas.delete(p["id"])
-            player["projectiles"].remove(p)
+    mine = first_circle_hit(position[0], position[1], TANK_HITBOX_RADIUS, world["mines"])
+    if mine is None:
+        return
+    world["canvas"].delete(mine["id"])
+    world["mines"].remove(mine)
+    destroy_player(world, player)
 
 
-def update_shoot_animations(canvas, player):
+def break_tree(world, tree):
+    """
+    Macht: Verwandelt einen getroffenen Baum in einen Baumstumpf, der nicht mehr blockiert.
+    Input: world (Spielfeld-Dict), tree (Baum-Dict)
+    Output: kein Rueckgabewert
+    """
+    world["canvas"].itemconfig(tree["id"], image=world["trunk_photo"])
+    world["trees"].remove(tree)
+
+
+def remove_projectile(canvas, player, projectile):
+    """
+    Macht: Loescht ein Projektil vom Spielfeld und aus der Liste des Spielers.
+    Input: canvas, player (Spieler-Dict), projectile (Projektil-Dict)
+    Output: kein Rueckgabewert
+    """
+    canvas.delete(projectile["id"])
+    player["projectiles"].remove(projectile)
+
+
+def update_projectiles(world, player):
+    """
+    Macht: Bewegt die Projektile eines Spielers weiter. Ein Projektil verschwindet,
+           wenn es einen Baum (der dabei umfaellt), ein Wrack (Deckung) trifft
+           oder das Spielfeld verlaesst.
+    Input: world (Spielfeld-Dict), player (Spieler-Dict)
+    Output: kein Rueckgabewert
+    """
+    canvas = world["canvas"]
+    for projectile in player["projectiles"][:]:
+        canvas.move(projectile["id"], projectile["dx"] * PROJECTILE_SPEED, projectile["dy"] * PROJECTILE_SPEED)
+        box = canvas.coords(projectile["id"])
+
+        tree = first_rect_hit(box, world["trees"])
+        if tree is not None:
+            break_tree(world, tree)
+
+        left_field = box[2] < 0 or box[0] > world["width"] or box[3] < 0 or box[1] > world["height"]
+        if tree is not None or left_field or first_rect_hit(box, world["wrecks"]) is not None:
+            remove_projectile(canvas, player, projectile)
+
+
+def update_shoot_animation(canvas, player):
     """
     Macht: Spielt die Schuss-Animation eines Spielers ab und stellt danach das normale Panzerbild wieder her.
-    Input: canvas, player
+    Input: canvas, player (Spieler-Dict)
     Output: kein Rueckgabewert
     """
     animation = player["shoot_animation"]
@@ -613,113 +792,139 @@ def update_reload_indicator(canvas, player):
     Input: canvas, player (Spieler-Dict)
     Output: kein Rueckgabewert
     """
-    if not player["alive"]:
-        canvas.itemconfig(player["reload_ring"], state="hidden")
-        return
-
-    elapsed = time.time() - player["state"]["last_shot_time"]
-    progress = min(1.0, elapsed / SHOOT_COOLDOWN)
+    progress = (time.time() - player["state"]["last_shot_time"]) / SHOOT_COOLDOWN
     if progress >= 1.0:
         canvas.itemconfig(player["reload_ring"], state="hidden")
         return
-
-    r = RELOAD_RING_RADIUS
-    _, name_top, name_right, name_bottom = canvas.bbox(player["name_tag"])
-    ring_cx = name_right + RELOAD_RING_GAP + r
-    ring_cy = (name_top + name_bottom) / 2
-    canvas.coords(player["reload_ring"], ring_cx - r, ring_cy - r, ring_cx + r, ring_cy + r)
+    canvas.coords(player["reload_ring"], *reload_ring_box(canvas, player["name_tag"]))
     canvas.itemconfig(player["reload_ring"], state="normal", extent=-360 * progress)
 
 
-def update_explosion(canvas, player, explosion_frames, wrecks):
+def create_wreck(world, position, angle):
+    """
+    Macht: Legt an der Stelle eines zerstoerten Panzers ein brennendes Wrack ab,
+           das ab sofort als Deckung wirkt (blockiert Panzer und Projektile).
+    Input: world (Spielfeld-Dict), position ((x, y)), angle (Blickwinkel des Panzers)
+    Output: kein Rueckgabewert
+    """
+    frames = world["destroyed_frames"][angle]
+    world["wrecks"].append({
+        "id": world["canvas"].create_image(*position, image=frames[0]),
+        "cx": position[0],
+        "cy": position[1],
+        "radius": TANK_HITBOX_RADIUS,
+        "frames": frames,
+        "frame": 0,
+        "next_frame_time": time.time() + WRECK_FRAME_MS / 1000,
+    })
+
+
+def update_explosion(world, player):
     """
     Macht: Zeigt den naechsten Explosionsframe. Nach dem letzten Frame wird die
-           Explosion durch ein liegenbleibendes Panzer-Wrack ersetzt, das ab
-           sofort als Deckung wirkt (blockiert Panzer und Projektile).
-    Input: canvas, player (Spieler-Dict), explosion_frames (Liste von Explosionsbildern),
-           wrecks (Liste, in die das neue Wrack eingetragen wird)
+           Explosion durch ein Wrack ersetzt.
+    Input: world (Spielfeld-Dict), player (Spieler-Dict)
     Output: kein Rueckgabewert
     """
     explosion = player["explosion"]
     if explosion is None or time.time() < explosion["next_frame_time"]:
         return
+
+    canvas = world["canvas"]
     explosion["frame"] += 1
-    if explosion["frame"] >= len(explosion_frames):
-        x, y = canvas.coords(explosion["id"])
-        canvas.delete(explosion["id"])
-        frames = canvas.destroyed_tank_frames[player["state"]["angle"]]
-        wreck_id = canvas.create_image(x, y, image=frames[0])
-        player["wreck"] = wreck_id
-        wrecks.append({
-            "id": wreck_id, "cx": x, "cy": y, "radius": WRECK_HITBOX_RADIUS,
-            "frames": frames, "frame": 0,
-            "next_frame_time": time.time() + WRECK_FRAME_MS / 1000,
-        })
-        player["explosion"] = None
+    if explosion["frame"] < len(world["explosion_frames"]):
+        canvas.itemconfig(explosion["id"], image=world["explosion_frames"][explosion["frame"]])
+        explosion["next_frame_time"] = time.time() + EXPLOSION_FRAME_MS / 1000
         return
-    canvas.itemconfig(explosion["id"], image=explosion_frames[explosion["frame"]])
-    explosion["next_frame_time"] = time.time() + EXPLOSION_FRAME_MS / 1000
+
+    position = canvas.coords(explosion["id"])
+    canvas.delete(explosion["id"])
+    player["explosion"] = None
+    create_wreck(world, position, player["state"]["angle"])
 
 
-def update_wrecks(canvas, wrecks):
+def update_wrecks(world):
     """
-    Macht: Spielt die Rauch-Animation der brennenden Wracks ab. Die Bilderfolge
-           laeuft in Dauerschleife, das Wrack qualmt also bis zum Spielende.
-    Input: canvas, wrecks (Liste der Wracks)
+    Macht: Spielt die Rauch-Animation der brennenden Wracks in Dauerschleife ab.
+    Input: world (Spielfeld-Dict)
     Output: kein Rueckgabewert
     """
     now = time.time()
-    for wreck in wrecks:
+    for wreck in world["wrecks"]:
         if now < wreck["next_frame_time"]:
             continue
         wreck["frame"] = (wreck["frame"] + 1) % len(wreck["frames"])
-        canvas.itemconfig(wreck["id"], image=wreck["frames"][wreck["frame"]])
+        world["canvas"].itemconfig(wreck["id"], image=wreck["frames"][wreck["frame"]])
         wreck["next_frame_time"] = now + WRECK_FRAME_MS / 1000
 
 
-def update_player(canvas, player, keys_pressed, width, height, obstacles, trunk_photo, other_players, mines, explosion_frames, wrecks):
+def update_player(world, player, keys_pressed, other_players):
     """
-    Macht: Aktualisiert einen Spieler fuer einen Frame (Drehung, Bewegung, Projektile).
-    Input: canvas, player, keys_pressed, width, height (Spielfeldgroesse),
-           obstacles (Baeume), trunk_photo (Stumpf-Bild), other_players (uebrige Spieler),
-           mines (Liste der Minen), explosion_frames (Liste von Explosionsbildern),
-           wrecks (Liste zerstoerter Panzer, die Deckung geben)
+    Macht: Aktualisiert einen Spieler fuer einen Frame: Animationen, Nachlade-Ring,
+           Drehung, Bewegung (inkl. Minen) und Projektile.
+    Input: world (Spielfeld-Dict), player, keys_pressed (gedrueckte Tasten),
+           other_players (uebrige Spieler)
     Output: kein Rueckgabewert
     """
-    update_shoot_animations(canvas, player)
-    update_explosion(canvas, player, explosion_frames, wrecks)
-    update_reload_indicator(canvas, player)
-
+    canvas = world["canvas"]
+    update_shoot_animation(canvas, player)
+    update_explosion(world, player)
     if not player["alive"]:
         player["moving"] = False
         return
 
+    update_reload_indicator(canvas, player)
     forward, backward, turn_left, turn_right = read_movement_keys(player["keys"], keys_pressed)
     update_rotation(canvas, player, turn_left, turn_right)
-    move_tank(canvas, player, forward, backward, width, height, obstacles, other_players, mines, explosion_frames, wrecks)
-    update_projectiles(canvas, player, obstacles, trunk_photo, width, height, wrecks)
+    new_position = move_tank(world, player, forward, backward, other_players)
+    if new_position is not None:
+        trigger_mine(world, player, new_position)
+    update_projectiles(world, player)
 
 
-def check_hits(canvas, players, explosion_frames):
+def check_hits(world, players):
     """
     Macht: Prueft fuer alle Spieler, ob ein Projektil einen gegnerischen Panzer trifft.
-    Input: canvas, players (Liste aller Spieler), explosion_frames (Liste von Explosionsbildern)
+    Input: world (Spielfeld-Dict), players (Liste aller Spieler)
     Output: kein Rueckgabewert
     """
+    canvas = world["canvas"]
     for shooter in players:
-        for p in shooter["projectiles"][:]:
-            bullet_box = canvas.coords(p["id"])
+        for projectile in shooter["projectiles"][:]:
+            box = canvas.coords(projectile["id"])
+            targets = [p for p in players if p is not shooter and p["alive"]]
+            target = next((p for p in targets if first_rect_hit(box, [tank_circle(canvas, p)])), None)
+            if target is not None:
+                destroy_player(world, target)
+                remove_projectile(canvas, shooter, projectile)
 
-            for target in players:
-                if target is shooter or not target["alive"]:
-                    continue
 
-                cx, cy, radius = tank_hit_circle(canvas, target)
-                if circle_rect_overlap(cx, cy, radius, bullet_box):
-                    destroy_player(canvas, target, explosion_frames)
-                    canvas.delete(p["id"])
-                    shooter["projectiles"].remove(p)
-                    break
+# ============================================================================
+# Ablauf einer Partie
+# ============================================================================
+
+def bind_key_tracking(root, keys_pressed):
+    """
+    Macht: Merkt sich laufend, welche Tasten gerade gedrueckt sind.
+    Input: root (Tk-Fenster), keys_pressed (Menge, die aktuell gehalten wird)
+    Output: kein Rueckgabewert
+    """
+    root.bind("<KeyPress>", lambda event: keys_pressed.add(event.keysym.lower()))
+    root.bind("<KeyRelease>", lambda event: keys_pressed.discard(event.keysym.lower()))
+
+
+def stop_match(match):
+    """
+    Macht: Beendet Eingaben und Sounds einer Partie (gemeinsam fuer Sieg und Leave).
+    Input: match (Partie-Dict)
+    Output: kein Rueckgabewert
+    """
+    root = match["root"]
+    stop_match_sounds(match["sounds"])
+    for player_keys in PLAYER_KEYS.values():
+        root.unbind(f"<KeyPress-{player_keys['shoot']}>")
+    root.unbind("<KeyPress>")
+    root.unbind("<KeyRelease>")
 
 
 def return_to_menu():
@@ -732,232 +937,123 @@ def return_to_menu():
     menu.mode_menu()
 
 
+def leave_game(match):
+    """
+    Macht: Bricht die laufende Partie sofort ab und kehrt ins Menue zurueck.
+    Input: match (Partie-Dict)
+    Output: kein Rueckgabewert
+    """
+    if not match["active"]:
+        return
+    match["active"] = False
+    stop_match(match)
+    return_to_menu()
+
+
+def keep_wrecks_burning(match):
+    """
+    Macht: Haelt die Rauch-Animation der Wracks waehrend der Pause vor dem
+           Leaderboard am Laufen -- die normale Spiel-Loop ist dann schon beendet.
+    Input: match (Partie-Dict)
+    Output: kein Rueckgabewert
+    """
+    if not match["active"] or not match["world"]["canvas"].winfo_exists():
+        return
+    update_wrecks(match["world"])
+    match["root"].after(DELAY, keep_wrecks_burning, match)
+
+
+def show_result_screen(match, winner_text):
+    """
+    Macht: Zeigt nach der Pause das Leaderboard/Gewinner-Fenster an.
+    Input: match (Partie-Dict), winner_text (Text fuer den Gewinner)
+    Output: kein Rueckgabewert
+    """
+    if not match["active"]:
+        return  # Spieler hat die Partie inzwischen ueber Leave verlassen
+    root = match["root"]
+    show_winner_screen(
+        root,
+        winner_text,
+        get_leaderboard(),
+        lambda: run_game(root, match["mode"], match["player_names"]),
+        return_to_menu,
+    )
+
+
+def end_match(match, alive_players):
+    """
+    Macht: Wertet das Spielende aus (Sieg eintragen, Eingaben/Sounds stoppen)
+           und zeigt nach einer kurzen Pause das Leaderboard.
+    Input: match (Partie-Dict), alive_players (Liste der ueberlebenden Spieler)
+    Output: kein Rueckgabewert
+    """
+    stop_match(match)
+    if alive_players:
+        winner_text = f"{alive_players[0]['name']} gewinnt!"
+        record_win(alive_players[0]["name"])
+    else:
+        winner_text = "Unentschieden!"
+    keep_wrecks_burning(match)
+    match["root"].after(WIN_SCREEN_DELAY_MS, show_result_screen, match, winner_text)
+
+
+def game_loop(match):
+    """
+    Macht: Fuehrt einen Frame der Partie aus und plant den naechsten Frame.
+           Die Partie endet, sobald hoechstens ein Panzer uebrig ist und keine
+           Explosion mehr laeuft.
+    Input: match (Partie-Dict)
+    Output: kein Rueckgabewert
+    """
+    if not match["active"]:
+        return  # Partie wurde ueber den Leave-Button abgebrochen
+
+    world, players = match["world"], match["players"]
+    update_ambient_sounds(match["sounds"])
+    for player in players:
+        update_player(world, player, match["keys_pressed"], [p for p in players if p is not player])
+    update_move_sound(match["sounds"], players)
+    check_hits(world, players)
+    update_wrecks(world)
+
+    alive_players = [p for p in players if p["alive"]]
+    explosions_running = any(p["explosion"] is not None for p in players)
+    if len(alive_players) <= 1 and not explosions_running:
+        end_match(match, alive_players)
+        return
+    match["root"].after(DELAY, game_loop, match)
+
+
 def run_game(root, mode, player_names=None):
     """
-    Macht: Baut das Spielfeld auf (Hintergrund, Baeume, Spieler) und startet die Spiel-Loop.
+    Macht: Startet eine neue Partie: Spielfeld und Spieler aufbauen, Tasten
+           und Sounds einrichten und die Spiel-Loop starten.
     Input: root (Tk-Fenster), mode (Spielmodus-String, "1 vs 1" oder "1 vs 1 vs 1"),
            player_names (Liste der vom Menu eingegebenen Spielernamen, optional)
     Output: kein Rueckgabewert
     """
-    player_count = 3 if mode == "1 vs 1 vs 1" else 2
+    player_count = len(PLAYER_NUMBERS_BY_MODE[mode])
     if not player_names or len(player_names) < player_count:
         player_names = [f"Spieler {n}" for n in range(1, player_count + 1)]
     register_players(player_names)
     for widget in root.winfo_children():
         widget.destroy()
 
-    WIDTH = root.winfo_width()
-    HEIGHT = root.winfo_height()
-
-    canvas = Canvas(root, width=WIDTH, height=HEIGHT, bg="darkgreen")
-    canvas.pack()
-
-    background_image = Image.open(BACKGROUND_PATH).resize((WIDTH, HEIGHT))
-    background_photo = ImageTk.PhotoImage(background_image)
-    canvas.background_photo = background_photo
-    canvas.create_image(0, 0, anchor="nw", image=background_photo)
-
-    tree_photos = [load_tree_photo(path) for path in TREE_IMAGE_PATHS]
-    canvas.tree_photos = tree_photos
-    obstacle_boxes = spawn_obstacles(canvas, WIDTH, HEIGHT, tree_photos)
-
-    avg_tree_size = sum(max(photo.width(), photo.height()) for photo in tree_photos) / len(tree_photos)
-    trunk_photo = load_image_scaled_to(TREE_TRUNK_PATH, avg_tree_size * TREE_TRUNK_SIZE_RATIO)
-    canvas.trunk_photo = trunk_photo
-
-    player_numbers = [1, 2, 3] if mode == "1 vs 1 vs 1" else [1, 2]
-    tank_images_by_player = {n: get_tank_images(PLAYER_COLORS[n]) for n in player_numbers}
-    muzzle_flash_frames_by_player = {
-        n: get_muzzle_flash_frames(PLAYER_COLORS[n]) for n in player_numbers
+    world = build_world(root)
+    match = {
+        "root": root,
+        "mode": mode,
+        "player_names": player_names,
+        "world": world,
+        "players": create_players(root, world, mode, player_names),
+        "keys_pressed": set(),
+        "sounds": start_match_sounds(),
+        "active": True,
     }
-    explosion_frames = load_explosion_frames()
-    canvas.explosion_frames = explosion_frames
-    canvas.destroyed_tank_frames = get_destroyed_tank_frames()
+    bind_key_tracking(root, match["keys_pressed"])
 
-    tank_half_w = tank_images_by_player[1][0].width() // 2
-    tank_half_h = tank_images_by_player[1][0].height() // 2
-    tree_boxes = [
-        (tree["cx"] - tree["radius"], tree["cy"] - tree["radius"], tree["cx"] + tree["radius"], tree["cy"] + tree["radius"])
-        for tree in obstacle_boxes
-    ]
-
-    mine_photo = load_mine_photo()
-    canvas.mine_photo = mine_photo
-    mines = spawn_mines(canvas, WIDTH, HEIGHT, mine_photo, tree_boxes)
-    mine_boxes = [
-        (mine["cx"] - mine["radius"], mine["cy"] - mine["radius"], mine["cx"] + mine["radius"], mine["cy"] + mine["radius"])
-        for mine in mines
-    ]
-    spawn_avoid_boxes = tree_boxes + mine_boxes
-
-    wrecks = []
-
-    placed_spawns = []
-
-    def random_tank_spawn():
-        """
-        Macht: Findet eine Position mit Abstand zu Baeumen und zu bereits vergebenen Panzer-Spawns.
-        Input: keine
-        Output: (x, y) -- eine Spawnposition
-        """
-        for _ in range(50):
-            x, y = random_spawn_position(WIDTH, HEIGHT, spawn_avoid_boxes, tank_half_w, tank_half_h)
-            far_enough = all(
-                math.hypot(x - px, y - py) >= MIN_PLAYER_SPAWN_DISTANCE
-                for px, py in placed_spawns
-            )
-            if far_enough:
-                break
-        placed_spawns.append((x, y))
-        return x, y
-
-    spawn1_x, spawn1_y = random_tank_spawn()
-    spawn2_x, spawn2_y = random_tank_spawn()
-
-    players = [
-        create_player(root, canvas, player_names[0], PLAYER_KEYS[1], tank_images_by_player[1], muzzle_flash_frames_by_player[1], spawn1_x, spawn1_y),
-        create_player(root, canvas, player_names[1], PLAYER_KEYS[2], tank_images_by_player[2], muzzle_flash_frames_by_player[2], spawn2_x, spawn2_y),
-    ]
-    if mode == "1 vs 1 vs 1":
-        spawn3_x, spawn3_y = random_tank_spawn()
-        players.append(
-            create_player(root, canvas, player_names[2], PLAYER_KEYS[3], tank_images_by_player[3], muzzle_flash_frames_by_player[3], spawn3_x, spawn3_y)
-        )
-
-    keys_pressed = set()
-
-    def on_key_down(event):
-        """
-        Macht: Merkt sich eine gedrueckte Taste.
-        Input: event (Tkinter-Tastenereignis)
-        Output: kein Rueckgabewert
-        """
-        keys_pressed.add(event.keysym.lower())
-
-    def on_key_up(event):
-        """
-        Macht: Entfernt eine losgelassene Taste.
-        Input: event (Tkinter-Tastenereignis)
-        Output: kein Rueckgabewert
-        """
-        keys_pressed.discard(event.keysym.lower())
-
-    root.bind("<KeyPress>", on_key_down)
-    root.bind("<KeyRelease>", on_key_up)
-
-    move_channel = None
-    idle_channel = IDLE_TANK_SOUND.play(loops=-1)
-    ambient_state = start_ambient_sounds()
-
-    game_state = {"active": True}
-
-    def leave_game():
-        """
-        Macht: Bricht die laufende Partie sofort ab, raeumt Tastenbindungen
-               und Sounds auf und kehrt ins Menue zurueck.
-        Input: keine
-        Output: kein Rueckgabewert
-        """
-        if not game_state["active"]:
-            return
-        game_state["active"] = False
-        if move_channel is not None:
-            move_channel.fadeout(MOVE_SOUND_FADEOUT_MS)
-        if idle_channel is not None:
-            idle_channel.fadeout(MOVE_SOUND_FADEOUT_MS)
-        stop_ambient_sounds(ambient_state)
-        for player_keys in PLAYER_KEYS.values():
-            root.unbind(f"<KeyPress-{player_keys['shoot']}>")
-        root.unbind("<KeyPress>")
-        root.unbind("<KeyRelease>")
-        return_to_menu()
-
-    leave_button = Button(root, text="Leave", bg="lightgray", command=leave_game)
+    leave_button = Button(root, text="Leave", bg="lightgray", command=lambda: leave_game(match))
     leave_button.place(relx=0.005, rely=0.01, relwidth=0.1, relheight=0.1)
 
-    def game_loop():
-        """
-        Macht: Fuehrt einen Frame der Spiel-Loop aus (Update, Sound, Treffer,
-               Sieg-Check) und plant den naechsten Frame.
-        Input: keine
-        Output: kein Rueckgabewert
-        """
-        nonlocal move_channel
-
-        if not game_state["active"]:
-            return  # Partie wurde ueber den Leave-Button abgebrochen
-
-        update_ambient_sounds(ambient_state)
-
-        for player in players:
-            other_players = [p for p in players if p is not player]
-            update_player(
-                canvas, player, keys_pressed, WIDTH, HEIGHT, obstacle_boxes,
-                trunk_photo, other_players, mines, explosion_frames, wrecks,
-            )
-
-        any_moving = any(p["moving"] for p in players)
-        if any_moving and move_channel is None:
-            move_channel = MOVE_SOUND.play(loops=-1)
-        elif not any_moving and move_channel is not None:
-            move_channel.fadeout(MOVE_SOUND_FADEOUT_MS)
-            move_channel = None
-
-        check_hits(canvas, players, explosion_frames)
-        update_wrecks(canvas, wrecks)
-
-        alive_players = [p for p in players if p["alive"]]
-        if len(alive_players) <= 1:
-            if any(player["explosion"] is not None for player in players):
-                root.after(DELAY, game_loop)
-                return
-            if move_channel is not None:
-                move_channel.fadeout(MOVE_SOUND_FADEOUT_MS)
-            if idle_channel is not None:
-                idle_channel.fadeout(MOVE_SOUND_FADEOUT_MS)
-            stop_ambient_sounds(ambient_state)
-            winner_text = f"{alive_players[0]['name']} gewinnt!" if alive_players else "Unentschieden!"
-            if alive_players:
-                record_win(alive_players[0]["name"])
-            for player_keys in PLAYER_KEYS.values():
-                root.unbind(f"<KeyPress-{player_keys['shoot']}>")
-            root.unbind("<KeyPress>")
-            root.unbind("<KeyRelease>")
-
-            def show_screen():
-                """
-                Macht: Zeigt nach der Pause das Leaderboard/Gewinner-Fenster an.
-                Input: keine
-                Output: kein Rueckgabewert
-                """
-                if not game_state["active"]:
-                    return  # Spieler hat die Partie inzwischen ueber Leave verlassen
-                show_winner_screen(
-                    root,
-                    winner_text,
-                    get_leaderboard(),
-                    lambda: run_game(root, mode, player_names),
-                    return_to_menu,
-                )
-
-            def keep_wrecks_burning():
-                """
-                Macht: Haelt die Rauch-Animation der Wracks waehrend der Pause
-                       vor dem Leaderboard am Laufen. Die normale Spiel-Loop
-                       ist hier schon beendet -- ohne diese Schleife wuerde das
-                       Wrack genau dann stehenbleiben, wenn man es ansieht.
-                Input: keine
-                Output: kein Rueckgabewert
-                """
-                if not game_state["active"] or not canvas.winfo_exists():
-                    return
-                update_wrecks(canvas, wrecks)
-                root.after(DELAY, keep_wrecks_burning)
-
-            keep_wrecks_burning()
-            root.after(WIN_SCREEN_DELAY_MS, show_screen)
-            return
-
-        root.after(DELAY, game_loop)
-
-    game_loop()
+    game_loop(match)
