@@ -107,7 +107,7 @@ Für die Tests öffnet sich kurz ein unsichtbares Tk-Fenster.
 | Person | Aufgaben |
 |---|---|
 | Noah Hiltbrunner | Spiellogik (`game.py`), Bilderzeugung (`build_tank_images.py`), Scoreboard, Endbildschirm, Tests, Build der exe |
-| dim mim | Menü (`menu.py`) |
+| Mikhail Dudko | Menü (`menu.py`) |
 | Jun Rösli | Grafiken: Karte, Panzer, Bäume, Minen und Explosionen (`Assets/`) |
 | Kian Böhm | Animationen für Schuss und zerstörte Panzer, Logo und Sounds |
 
