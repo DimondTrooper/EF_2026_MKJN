@@ -182,7 +182,7 @@ def get_tank_images(color="blue"):
 
 
 DESTROYED_DIR = resource_path("Assets/Tank_Destroyed_animation")
-DESTROYED_FRAME_COUNT = 4
+DESTROYED_FRAME = 1  #die Wrack-Animation ist abgeschaltet; es wird nur dieses Bild benutzt
 
 #Fuer das brennende Wrack gibt es zu jedem der 8 Blickwinkel eine eigene
 #Zeichnung (der Rauch steigt immer nach oben und laesst sich deshalb nicht
@@ -194,9 +194,9 @@ DESTROYED_ANGLE_NAMES = {
 }
 
 #Der dicke Rauch macht die uebliche Rumpferkennung unbrauchbar -- er ist voll
-#deckend, ueberlappt den Rumpf und veraendert sich pro Frame. Stattdessen
+#deckend und ueberlappt den Rumpf. Stattdessen
 #dient das FEUER als Ankerpunkt: es ist farblich eindeutig (warme Toene, die
-#im Rauch nicht vorkommen) und in allen Frames und Richtungen an derselben
+#im Rauch nicht vorkommen) und in allen Richtungen an derselben
 #Stelle des Panzers gezeichnet.
 #Beide Werte wurden an den Originaldateien ausgemessen (Richtungen, in denen
 #der Rauch den Rumpf nicht ueberdeckt: Downleft/Down/Downright):
@@ -238,25 +238,22 @@ def _fire_center(img):
     return (sum_x / count, sum_y / count)
 
 
-def _destroyed_frame_path(angle, frame_number):
+def _destroyed_image_path(angle):
     """
-    Macht: Baut den Dateipfad zu einem Wrack-Frame.
-    Input: angle (Blickwinkel), frame_number (1 bis DESTROYED_FRAME_COUNT)
+    Macht: Baut den Dateipfad zum Wrack-Bild eines Blickwinkels.
+    Input: angle (Blickwinkel)
     Output: Dateipfad (String)
     """
-    return f"{DESTROYED_DIR}/Tank_Destroyed_{DESTROYED_ANGLE_NAMES[angle]}{frame_number}.png"
+    return f"{DESTROYED_DIR}/Tank_Destroyed_{DESTROYED_ANGLE_NAMES[angle]}{DESTROYED_FRAME}.png"
 
 
-def get_destroyed_tank_frames():
+def get_destroyed_tank_images():
     """
-    Macht: Laedt die Animation des brennenden Wracks -- fuer jeden der 8
-           Blickwinkel die DESTROYED_FRAME_COUNT Einzelbilder. Die Bilder
-           werden am Feuer ausgerichtet, damit das Wrack ungefaehr dort liegt,
-           wo der Panzer zerstoert wurde. Da die Frames einzeln gezeichnet sind
-           und das Feuer flackert, kann das Wrack zwischen den Frames um ein
-           paar Pixel springen.
+    Macht: Laedt das Bild des brennenden Wracks fuer jeden der 8 Blickwinkel.
+           Die Bilder werden am Feuer ausgerichtet, damit das Wrack ungefaehr
+           dort liegt, wo der Panzer zerstoert wurde.
     Input: keine
-    Output: Dict {winkel: Liste von ImageTk.PhotoImage}
+    Output: Dict {winkel: ImageTk.PhotoImage}
     """
     scale = HULL_PX / DESTROYED_SOURCE_HULL_PX
     prepared = {}
@@ -264,33 +261,29 @@ def get_destroyed_tank_frames():
 
     for angle in DESTROYED_ANGLE_NAMES:
         forward_x, forward_y = _forward_vector(angle)
-        prepared[angle] = []
-        for frame_number in range(1, DESTROYED_FRAME_COUNT + 1):
-            img = Image.open(_destroyed_frame_path(angle, frame_number)).convert("RGBA")
-            fire = _fire_center(img)
-            if fire is None:  #Notfalls die Bildmitte nehmen, statt abzustuerzen
-                fire = (img.width / 2, img.height / 2)
-            anchor_x = (fire[0] + DESTROYED_FIRE_TO_HULL_PX * forward_x) * scale
-            anchor_y = (fire[1] + DESTROYED_FIRE_TO_HULL_PX * forward_y) * scale
+        img = Image.open(_destroyed_image_path(angle)).convert("RGBA")
+        fire = _fire_center(img)
+        if fire is None:  #Notfalls die Bildmitte nehmen, statt abzustuerzen
+            fire = (img.width / 2, img.height / 2)
+        anchor_x = (fire[0] + DESTROYED_FIRE_TO_HULL_PX * forward_x) * scale
+        anchor_y = (fire[1] + DESTROYED_FIRE_TO_HULL_PX * forward_y) * scale
 
-            scaled = img.resize(
-                (max(1, round(img.width * scale)), max(1, round(img.height * scale))),
-                Image.LANCZOS,
-            )
-            bbox = scaled.split()[-1].getbbox()
-            half = max(half, anchor_x - bbox[0], bbox[2] - anchor_x,
-                       anchor_y - bbox[1], bbox[3] - anchor_y)
-            prepared[angle].append((scaled, anchor_x, anchor_y))
+        scaled = img.resize(
+            (max(1, round(img.width * scale)), max(1, round(img.height * scale))),
+            Image.LANCZOS,
+        )
+        bbox = scaled.split()[-1].getbbox()
+        half = max(half, anchor_x - bbox[0], bbox[2] - anchor_x,
+                   anchor_y - bbox[1], bbox[3] - anchor_y)
+        prepared[angle] = (scaled, anchor_x, anchor_y)
 
     size = int(math.ceil(half)) * 2 + 4
-    frames_by_angle = {}
-    for angle, entries in prepared.items():
-        frames_by_angle[angle] = []
-        for scaled, anchor_x, anchor_y in entries:
-            canvas = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-            canvas.paste(scaled, (round(size / 2 - anchor_x), round(size / 2 - anchor_y)), scaled)
-            frames_by_angle[angle].append(ImageTk.PhotoImage(canvas))
-    return frames_by_angle
+    images = {}
+    for angle, (scaled, anchor_x, anchor_y) in prepared.items():
+        canvas = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+        canvas.paste(scaled, (round(size / 2 - anchor_x), round(size / 2 - anchor_y)), scaled)
+        images[angle] = ImageTk.PhotoImage(canvas)
+    return images
 
 
 def _muzzle_flash_path(color, orientation, frame_number):

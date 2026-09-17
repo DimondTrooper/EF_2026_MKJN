@@ -9,7 +9,7 @@ import pygame
 from tkinter import Button, Canvas
 from PIL import Image, ImageTk
 
-from build_tank_images import HULL_PX, get_destroyed_tank_frames, get_muzzle_flash_frames, get_tank_images
+from build_tank_images import HULL_PX, get_destroyed_tank_images, get_muzzle_flash_frames, get_tank_images
 from scoreboard import get_leaderboard, record_win, register_players
 from utils import resource_path
 from winner_screen import show_winner_screen
@@ -67,7 +67,6 @@ SHOOT_ANIMATION_FRAME_MS = 60
 EXPLOSION_FRAME_COUNT = 4
 EXPLOSION_FRAME_MS = 80
 EXPLOSION_DISPLAY_SIZE = 110
-WRECK_FRAME_MS = 180  # Tempo der Rauch-Animation des brennenden Wracks
 WIN_SCREEN_DELAY_MS = 3000  # Pause nach Explosion/Wrack, bevor das Leaderboard erscheint
 
 # --- Steuerung ---
@@ -477,7 +476,7 @@ def build_world(root):
         "trunk_photo": load_image_scaled_to(TREE_TRUNK_PATH, avg_tree_size * TREE_TRUNK_SIZE_RATIO),
         "mine_photo": mine_photo,
         "explosion_frames": load_explosion_frames(),
-        "destroyed_frames": get_destroyed_tank_frames(),
+        "wreck_images": get_destroyed_tank_images(),
         "trees": trees,
         "mines": mines,
         "wrecks": [],
@@ -807,15 +806,11 @@ def create_wreck(world, position, angle):
     Input: world (Spielfeld-Dict), position ((x, y)), angle (Blickwinkel des Panzers)
     Output: kein Rueckgabewert
     """
-    frames = world["destroyed_frames"][angle]
     world["wrecks"].append({
-        "id": world["canvas"].create_image(*position, image=frames[0]),
+        "id": world["canvas"].create_image(*position, image=world["wreck_images"][angle]),
         "cx": position[0],
         "cy": position[1],
         "radius": TANK_HITBOX_RADIUS,
-        "frames": frames,
-        "frame": 0,
-        "next_frame_time": time.time() + WRECK_FRAME_MS / 1000,
     })
 
 
@@ -841,21 +836,6 @@ def update_explosion(world, player):
     canvas.delete(explosion["id"])
     player["explosion"] = None
     create_wreck(world, position, player["state"]["angle"])
-
-
-def update_wrecks(world):
-    """
-    Macht: Spielt die Rauch-Animation der brennenden Wracks in Dauerschleife ab.
-    Input: world (Spielfeld-Dict)
-    Output: kein Rueckgabewert
-    """
-    now = time.time()
-    for wreck in world["wrecks"]:
-        if now < wreck["next_frame_time"]:
-            continue
-        wreck["frame"] = (wreck["frame"] + 1) % len(wreck["frames"])
-        world["canvas"].itemconfig(wreck["id"], image=wreck["frames"][wreck["frame"]])
-        wreck["next_frame_time"] = now + WRECK_FRAME_MS / 1000
 
 
 def update_player(world, player, keys_pressed, other_players):
@@ -950,19 +930,6 @@ def leave_game(match):
     return_to_menu()
 
 
-def keep_wrecks_burning(match):
-    """
-    Macht: Haelt die Rauch-Animation der Wracks waehrend der Pause vor dem
-           Leaderboard am Laufen -- die normale Spiel-Loop ist dann schon beendet.
-    Input: match (Partie-Dict)
-    Output: kein Rueckgabewert
-    """
-    if not match["active"] or not match["world"]["canvas"].winfo_exists():
-        return
-    update_wrecks(match["world"])
-    match["root"].after(DELAY, keep_wrecks_burning, match)
-
-
 def show_result_screen(match, winner_text):
     """
     Macht: Zeigt nach der Pause das Leaderboard/Gewinner-Fenster an.
@@ -994,7 +961,6 @@ def end_match(match, alive_players):
         record_win(alive_players[0]["name"])
     else:
         winner_text = "Unentschieden!"
-    keep_wrecks_burning(match)
     match["root"].after(WIN_SCREEN_DELAY_MS, show_result_screen, match, winner_text)
 
 
@@ -1015,7 +981,6 @@ def game_loop(match):
         update_player(world, player, match["keys_pressed"], [p for p in players if p is not player])
     update_move_sound(match["sounds"], players)
     check_hits(world, players)
-    update_wrecks(world)
 
     alive_players = [p for p in players if p["alive"]]
     explosions_running = any(p["explosion"] is not None for p in players)
