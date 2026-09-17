@@ -500,6 +500,20 @@ def reload_ring_box(canvas, name_tag):
             center_x + RELOAD_RING_RADIUS, center_y + RELOAD_RING_RADIUS)
 
 
+#Claude code für bug mit Caps Lock
+def shoot_key_sequences(key):
+    """
+    Macht: Liefert die Tk-Tastenbindungen fuer eine Schusstaste. Bei Buchstaben
+           wird auch der Grossbuchstabe gebunden, weil Tk bei Caps Lock (oder
+           Shift) "E" statt "e" meldet und der Schuss sonst nicht ausloest.
+    Input: key (Tastenname, z.B. "e" oder "Control_R")
+    Output: Liste von Bindungen, z.B. ["<KeyPress-e>", "<KeyPress-E>"]
+    """
+    keys = [key, key.upper()] if len(key) == 1 and key.isalpha() else [key]
+    return [f"<KeyPress-{k}>" for k in keys]
+#Claude code für bug mit Caps Lock
+
+
 def create_player(root, canvas, name, keys, tank_images, muzzle_flash_frames, start):
     """
     Macht: Erstellt einen neuen Spieler samt Panzer-Bild, Namensschild,
@@ -540,7 +554,10 @@ def create_player(root, canvas, name, keys, tank_images, muzzle_flash_frames, st
         "shoot_animation": None,
         "explosion": None,
     }
-    root.bind(f"<KeyPress-{keys['shoot']}>", lambda event: fire_bullet(canvas, player))
+    #Claude code für bug mit Caps Lock
+    for sequence in shoot_key_sequences(keys["shoot"]):
+        root.bind(sequence, lambda event: fire_bullet(canvas, player))
+    #Claude code für bug mit Caps Lock
     return player
 
 
@@ -907,7 +924,10 @@ def stop_match(match):
     root = match["root"]
     stop_match_sounds(match["sounds"])
     for player_keys in PLAYER_KEYS.values():
-        root.unbind(f"<KeyPress-{player_keys['shoot']}>")
+        #Claude code für bug mit Caps Lock
+        for sequence in shoot_key_sequences(player_keys["shoot"]):
+            root.unbind(sequence)
+        #Claude code für bug mit Caps Lock
     root.unbind("<KeyPress>")
     root.unbind("<KeyRelease>")
 

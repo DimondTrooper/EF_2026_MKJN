@@ -409,9 +409,16 @@ class TestMoveTank(unittest.TestCase):
         self.assertFalse(self.player["moving"])
 
     def test_stays_inside_field(self):
-        player = make_player(self.world, (400, self.player["half_size"]))
+        player = make_player(self.world, (400, game.TANK_HITBOX_RADIUS))
         game.move_tank(self.world, player, True, False, [])
-        self.assertGreaterEqual(self.canvas.coords(player["tank"])[1], player["half_size"])
+        self.assertGreaterEqual(self.canvas.coords(player["tank"])[1], game.TANK_HITBOX_RADIUS)
+
+    def test_can_drive_close_to_edge(self):
+        # keine unsichtbare Wand: der Panzer kommt bis auf die Hitbox an den Rand
+        player = make_player(self.world, (400, game.TANK_HITBOX_RADIUS + 3))
+        for _ in range(10):
+            game.move_tank(self.world, player, True, False, [])
+        self.assertAlmostEqual(self.canvas.coords(player["tank"])[1], game.TANK_HITBOX_RADIUS, places=3)
 
     def test_blocked_by_tree(self):
         add_circle(self.world["trees"], 400, 300 - game.TANK_HITBOX_RADIUS - 10)
@@ -613,6 +620,25 @@ class TestEndMatch(unittest.TestCase):
         with mock.patch.object(game, "show_winner_screen") as show:
             game.show_result_screen(self.match, "egal")
         show.assert_not_called()
+
+
+#Claude code für bug mit Caps Lock
+class TestShootKeys(unittest.TestCase):
+    def test_letter_binds_lower_and_upper(self):
+        self.assertEqual(game.shoot_key_sequences("e"), ["<KeyPress-e>", "<KeyPress-E>"])
+
+    def test_special_key_binds_once(self):
+        self.assertEqual(game.shoot_key_sequences("Control_R"), ["<KeyPress-Control_R>"])
+
+    def test_caps_lock_binding_exists_and_is_removed(self):
+        world = make_world()
+        make_player(world, (400, 300))
+        self.assertNotEqual(shared_root.bind("<KeyPress-E>"), "")
+        match = {"root": shared_root, "sounds": {"move": None, "idle": None, "ambient": []}}
+        game.stop_match(match)
+        self.assertEqual(shared_root.bind("<KeyPress-e>"), "")
+        self.assertEqual(shared_root.bind("<KeyPress-E>"), "")
+#Claude code für bug mit Caps Lock
 
 
 class TestKeyTracking(unittest.TestCase):

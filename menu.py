@@ -1,14 +1,4 @@
 ### Claude code für problem bei rückgehen von menu nach spiel
-#menu.py wird als Skript gestartet (python menu.py) und laeuft deshalb als
-#Modul "__main__". game.py macht aber in return_to_menu() ein "import menu".
-#Python findet dann KEIN Modul namens "menu", laedt diese Datei ein ZWEITES
-#Mal von der Festplatte und fuehrt dabei auch "root = Tk()" erneut aus --
-#es entsteht ein zweites Tk-Fenster mit eigenem, getrenntem Interpreter.
-#PhotoImage-Bilder gehoeren aber immer zu genau einem Interpreter. Die Bilder
-#landeten im ersten, die Widgets im zweiten -> "image pyimageX doesn't exist",
-#"invalid command name ...", "application has been destroyed".
-#Fix: dieses Modul zusaetzlich unter dem Namen "menu" registrieren, damit
-#"import menu" genau dieses Modul zurueckgibt statt es neu zu laden.
 import sys
 sys.modules.setdefault('menu', sys.modules[__name__])
 ### Claude code für problem bei rückgehen von menu nach spiel
@@ -25,9 +15,6 @@ from utils import resource_path
 CITY_BACKGROUND_PATH = resource_path('Assets/Map_City.png')
 CITY_BLUR_RADIUS = 9  #Staerke der Weichzeichnung
 CITY_DARKEN_AMOUNT = 0.35  #0 = Originalfarben, 1 = schwarz; dunkler = Text besser lesbar
-
-
-
 
 def load_blurred_city_background(width, height):
     """
@@ -53,16 +40,10 @@ def mode_menu():
     frame.place(relx=0, rely=0, relwidth=1.0, relheight=1.0)
 
     ### Claude code für weichgezeichneten City-Hintergrund im Menu
-    #update_idletasks() ist noetig, weil root.winfo_width()/height() direkt
-    #nach dem Setzen von -fullscreen sonst noch die alte, kleine Fenstergroesse
-    #liefert und der Hintergrund dann falsch skaliert waere.
     root.update_idletasks()
     width = root.winfo_width()
     height = root.winfo_height()
-
-    #Hintergrund + Titel + Deko-Panzer liegen auf einem Canvas: dort sind
-    #Text und transparente PNG-Bereiche wirklich transparent, waehrend ein
-    #Label immer einen grauen Kasten mitbringen wuerde.
+    #####
     global menu_background_img
     bg_canvas = Canvas(frame, width=width, height=height, highlightthickness=0, bd=0, bg='#3f5c3f')
     bg_canvas.place(x=0, y=0, relwidth=1, relheight=1)
