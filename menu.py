@@ -5,8 +5,6 @@ sys.modules.setdefault('menu', sys.modules[__name__])
 
 from tkinter import *
 import game
-from tkinter import messagebox
-import os
 from PIL import Image, ImageTk, ImageFilter
 import ctypes
 from utils import resource_path
@@ -49,7 +47,6 @@ def mode_menu():
     root.update_idletasks()
     width = root.winfo_width()
     height = root.winfo_height()
-    #####
     global menu_background_img
     bg_canvas = Canvas(frame, width=width, height=height, highlightthickness=0, bd=0, bg='#3f5c3f')
     bg_canvas.place(x=0, y=0, relwidth=1, relheight=1)
@@ -141,7 +138,7 @@ def controls_screen(mode):
         "Turn Left                                                               A\n"
         "Shoot                                                                     E")
     p3_text=(
-        "Move Forward                                                   z\n"
+        "Move Forward                                                   Z\n"
         "Move Backward                                                H\n\n"
         "Turn Right                                                            J\n"
         "Turn Left                                                              G\n"
@@ -190,6 +187,19 @@ def player_name_box(frame, x_pos, title_text, default_name, tank_img, name_entri
     ent.pack(padx=10, pady=5, fill=X)
     name_entries_list.append(ent)
 
+#Namenseingabe von Noah geschrieben
+### Claude code für start_game als eigene Funktion
+def start_game(mode):
+    """
+    Macht: Liest die eingegebenen Namen aus (ein leeres Feld wird zu "Player N")
+           und startet das Spiel.
+    Input: mode (str) - Der ausgewählte Spielmodus ('1 vs 1' oder '1 vs 1 vs 1')
+    Output: Keine (startet das Spiel)
+    """
+    names = [entry.get().strip() or f'Player {i+1}' for i, entry in enumerate(name_entries)]
+    game.run_game(root, mode, names)
+### Claude code für start_game als eigene Funktion
+
 def name_input_screen(mode):
     """
     Macht: Zeigt den Bildschirm zur Namensänderung vor dem Spielstart an, 
@@ -218,12 +228,8 @@ def name_input_screen(mode):
         player_name_box(frame, 0.38, 'Player 2', 'Player 2', tank_p2_img, name_entries)
         player_name_box(frame, 0.7, 'Player 3', 'Player 3', tank_p3_img, name_entries)   
         
-    #Namenseingabe von Noah geschrieben 
-    def start_game():
-        names = [entry.get().strip() or default for entry, default in zip(name_entries, [f'Player {i+1}' for i in range(len(name_entries))])]
-        game.run_game(root, mode, names)
     #play btn->launches the game
-    btn_play = Button(frame, text='Play', bg='orange', font=('Calibri', 14, 'bold'), command=start_game)
+    btn_play = Button(frame, text='Play', bg='orange', font=('Calibri', 14, 'bold'), command=lambda: start_game(mode))
     btn_play.place(relx=0.36, rely=0.77, relwidth=0.27, relheight=0.1)
  
 root = Tk()
