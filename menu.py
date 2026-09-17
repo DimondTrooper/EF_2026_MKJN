@@ -32,6 +32,12 @@ def load_blurred_city_background(width, height):
 ### Claude code für weichgezeichneten City-Hintergrund im Menu
 
 def mode_menu():
+    """
+    Macht: Zeigt das Hauptmenü an, auf dem der Spieler den Spielmodus (1 vs 1 
+           oder 1 vs 1 vs 1) auswählen kann, inklusive Hintergrund und Menü-Buttons.
+    Input: Keine
+    Output: Keine (aktualisiert das Tkinter-Fenster)
+    """
     #clear old widgets->feels like switching
     for widget in root.winfo_children():
         widget.destroy()
@@ -75,8 +81,34 @@ def mode_menu():
     #btn for mode2
     btn_2=Button(frame, text='1 VS 1 VS 1 Mode', bg='lightblue', command=lambda: controls_screen('1 vs 1 vs 1'))
     btn_2.place(relx=0.4, rely=0.65, relwidth=0.2, relheight=0.1)
+
+def player_box(frame, x_pos, title_text, controls_text, tank_img=None):
+    """
+    Macht: Erstellt eine UI-Box für die Steuerungserklärung eines einzelnen Spielers,
+           inklusive Titel, Tastenbelegung und zugehörigem Panzerbild.
+    Input: frame (Frame) - Das übergeordnete Fenster-Frame
+           x_pos (float) - Die horizontale Position (relx) der Box
+           title_text (str) - Der Titel der Box (z.B. 'Controls Player 1')
+           controls_text (str) - Der Text mit der Tastenbelegung
+           tank_img (PhotoImage) - Das Bild des jeweiligen Panzers
+    Output: Keine (platziert die Box auf dem Frame)
+    """
+    box=Frame(frame, bd=2, relief=GROOVE)
+    box.place(relx=x_pos, rely=0.18, relwidth=0.23, relheight=0.45)
+    lbl_title=Label(box, text=title_text, font=('Calibri', 14, 'bold'))
+    lbl_title.pack(pady=10)
+    lbl_body=Label(box, text=controls_text, font=('Calibri', 11), justify=LEFT)
+    lbl_body.pack(padx=10, anchor='w')
+    if tank_img:
+        Label(box, image=tank_img).pack(pady=(25, 0))
  
 def controls_screen(mode):
+    """
+    Macht: Baut den Steuerungsbildschirm auf, zeigt die Tastenbelegungen für 
+           alle Spieler an und lädt die entsprechenden Tank-Grafiken.
+    Input: mode (str) - Der ausgewählte Spielmodus ('1 vs 1' oder '1 vs 1 vs 1')
+    Output: Keine (aktualisiert das Tkinter-Fenster)
+    """
     #d previous frame
     for widget in root.winfo_children():
         widget.destroy()
@@ -100,22 +132,6 @@ def controls_screen(mode):
     tank_p1_img = PhotoImage(file=resource_path('Assets/Tank_Blue_Right.png')).subsample(4, 4)
     tank_p2_img = PhotoImage(file=resource_path('Assets/Red_Tank_Right.png')).subsample(4, 4)
     tank_p3_img = PhotoImage(file=resource_path('Assets/Tank_Green_Right.png')).subsample(4, 4)
-
-    #helpfunct->create player boxes(controls explain)
-    def player_box(x_pos, title_text, controls_text):
-        box=Frame(frame, bd=2, relief=GROOVE)
-        box.place(relx=x_pos, rely=0.18, relwidth=0.23, relheight=0.45)
-
-        lbl_title=Label(box, text=title_text, font=('Calibri', 14, 'bold'))
-        lbl_title.pack(pady=10)
-
-        lbl_body=Label(box, text=controls_text, font=('Calibri', 11), justify=LEFT)
-        lbl_body.pack(padx=10, anchor='w')
-
-        #pics:
-        if title_text == 'Controls Player 1': Label(box, image=tank_p1_img).pack(pady=(25, 0))
-        elif title_text == 'Controls Player 2': Label(box, image=tank_p2_img).pack(pady=(25, 0))
-        elif title_text == 'Controls Player 3': Label(box, image=tank_p3_img).pack(pady=(25, 0))
  
     #texts-based on prototyp design
     p1_text=(
@@ -137,20 +153,50 @@ def controls_screen(mode):
         "Turn Left                                           Arrow Left\n"
         "Shoot                                                 Right Ctrl")
     #mode1->display 2 boxes; mode2->all bxs
-    if mode=='1 vs 1':
-        player_box(0.21, 'Controls Player 1', p1_text)
-        player_box(0.54, 'Controls Player 2', p2_text)
+    if mode == '1 vs 1':
+        player_box(frame, 0.21, 'Controls Player 1', p1_text, tank_p1_img)
+        player_box(frame, 0.54, 'Controls Player 2', p2_text, tank_p2_img)
     else:
-        player_box(0.06, 'Controls Player 1', p1_text)
-        player_box(0.38, 'Controls Player 2', p2_text)
-        player_box(0.7, 'Controls Player 3', p3_text)
+        player_box(frame, 0.06, 'Controls Player 1', p1_text, tank_p1_img)
+        player_box(frame, 0.38, 'Controls Player 2', p2_text, tank_p2_img)
+        player_box(frame, 0.7, 'Controls Player 3', p3_text, tank_p3_img)
  
     #continue btn
     btn_continue = Button(frame, text='Continue', bg='orange', font=('Calibri', 14, 'bold'), command=lambda: name_input_screen(mode))
     btn_continue.place(relx=0.36, rely=0.75, relwidth=0.27, relheight=0.1)
 
-#wndw to hcange players' names
+def player_name_box(frame, x_pos, title_text, default_name, tank_img, name_entries_list): 
+    """
+    Macht: Erstellt eine Eingabebox, in der ein Spieler seinen Namen anpassen kann,
+           ergänzt durch den jeweiligen Tank und Beschriftungen.
+    Input: frame (Frame) - Das übergeordnete Fenster-Frame
+           x_pos (float) - Die horizontale Position (relx) der Box
+           title_text (str) - Titel der Box (z.B. 'Player 1')
+           default_name (str) - Der voreingestellte Name im Textfeld
+           tank_img (PhotoImage) - Das zugehörige Tank-Bild
+           name_entries_list (list) - Liste, in der das Eingabefeld referenziert wird
+    Output: Keine (platziert das UI-Element im Frame)
+    """
+    box=Frame(frame, bd=2, relief=GROOVE)
+    box.place(relx=x_pos, rely=0.18, relwidth=0.23, relheight=0.55)
+    lbl_title=Label(box, text=title_text, font=('Calibri', 14, 'bold'))
+    lbl_title.pack(pady=5)
+    if tank_img:
+        Label(box, image=tank_img).pack(pady=(35, 10))
+    lbl_desc=Label(box, text="Enter name here:", font=('Calibri', 11))
+    lbl_desc.pack(pady=5)
+    ent=Entry(box, font=('Calibri', 12), justify='center')
+    ent.insert(0, default_name)
+    ent.pack(padx=10, pady=5, fill=X)
+    name_entries_list.append(ent)
+
 def name_input_screen(mode):
+    """
+    Macht: Zeigt den Bildschirm zur Namensänderung vor dem Spielstart an, 
+           sammelt die Eingaben und startet das eigentliche Spiel.
+    Input: mode (str) - Der ausgewählte Spielmodus ('1 vs 1' oder '1 vs 1 vs 1')
+    Output: Keine (startet das Spiel oder wechselt den Screen)
+    """
     for widget in root.winfo_children():
         widget.destroy()
     frame=Frame(root, bd=0)
@@ -164,33 +210,19 @@ def name_input_screen(mode):
     global name_entries
     name_entries=[]
 
-    def player_name_box(x_pos, title_text, default_name, tank_img):
-        box=Frame(frame, bd=2, relief=GROOVE)
-        box.place(relx=x_pos, rely=0.18, relwidth=0.23, relheight=0.55)
-        lbl_title=Label(box, text=title_text, font=('Calibri', 14, 'bold'))
-        lbl_title.pack(pady=5)
-        if tank_img:
-            Label(box, image=tank_img).pack(pady=(35, 10))
-        lbl_desc=Label(box, text="Enter name here:", font=('Calibri', 11))
-        lbl_desc.pack(pady=5)
-        ent=Entry(box, font=('Calibri', 12), justify='center')
-        ent.insert(0, default_name)
-        ent.pack(padx=10, pady=5, fill=X)
-        name_entries.append(ent)
     if mode == '1 vs 1':
-        player_name_box(0.21, 'Player 1', 'Player 1', tank_p1_img)
-        player_name_box(0.54, 'Player 2', 'Player 2', tank_p2_img)
+        player_name_box(frame, 0.21, 'Player 1', 'Player 1', tank_p1_img, name_entries)
+        player_name_box(frame, 0.54, 'Player 2', 'Player 2', tank_p2_img, name_entries)
     else:
-        player_name_box(0.06, 'Player 1', 'Player 1', tank_p1_img)
-        player_name_box(0.38, 'Player 2', 'Player 2', tank_p2_img)
-        player_name_box(0.7, 'Player 3', 'Player 3', tank_p3_img)
- 
-    #play btn->launches the game
+        player_name_box(frame, 0.06, 'Player 1', 'Player 1', tank_p1_img, name_entries)
+        player_name_box(frame, 0.38, 'Player 2', 'Player 2', tank_p2_img, name_entries)
+        player_name_box(frame, 0.7, 'Player 3', 'Player 3', tank_p3_img, name_entries)   
+        
     #Namenseingabe von Noah geschrieben 
     def start_game():
         names = [entry.get().strip() or default for entry, default in zip(name_entries, [f'Player {i+1}' for i in range(len(name_entries))])]
         game.run_game(root, mode, names)
-
+    #play btn->launches the game
     btn_play = Button(frame, text='Play', bg='orange', font=('Calibri', 14, 'bold'), command=start_game)
     btn_play.place(relx=0.36, rely=0.77, relwidth=0.27, relheight=0.1)
  
