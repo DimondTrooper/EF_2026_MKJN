@@ -1,5 +1,4 @@
 import math
-import os
 
 from PIL import Image, ImageTk
 
@@ -295,24 +294,6 @@ def _muzzle_flash_path(color, orientation, frame_number):
     return f"{MUZZLE_FLASH_DIR}/Tank_{color.capitalize()}_{orientation}_Mussleflash{frame_number}.png"
 
 
-def _resolve_muzzle_flash_path(color, orientation, frame_number):
-    """
-    Macht: Findet den Pfad zu einem Muendungsfeuer-Frame; fehlt genau dieser
-           Frame (z.B. Tank_Red_Diagonal_Mussleflash2.png), wird ersatzweise
-           der naechstliegende vorhandene Frame verwendet.
-    Input: color, orientation ("Straight"/"Diagonal"), frame_number (1..3)
-    Output: Dateipfad (String)
-    """
-    path = _muzzle_flash_path(color, orientation, frame_number)
-    if os.path.exists(path):
-        return path
-    for fallback_number in (2, 1, 3):
-        fallback_path = _muzzle_flash_path(color, orientation, fallback_number)
-        if os.path.exists(fallback_path):
-            return fallback_path
-    raise FileNotFoundError(f"Kein Muendungsfeuer-Bild fuer {color}/{orientation} gefunden")
-
-
 def get_muzzle_flash_frames(color="blue"):
     """
     Macht: Erzeugt fuer jeden der 8 Drehwinkel die 3 Muendungsfeuer-Frames
@@ -323,11 +304,11 @@ def get_muzzle_flash_frames(color="blue"):
     """
     base_straight, base_diagonal = TANK_BASE_PATHS[color]
     straight_bases = [
-        _load_scaled(_resolve_muzzle_flash_path(color, "Straight", n), rotated_45=False)
+        _load_scaled(_muzzle_flash_path(color, "Straight", n), rotated_45=False)
         for n in range(1, MUZZLE_FLASH_FRAME_COUNT + 1)
     ]
     diagonal_bases = [
-        _load_scaled(_resolve_muzzle_flash_path(color, "Diagonal", n), rotated_45=True)
+        _load_scaled(_muzzle_flash_path(color, "Diagonal", n), rotated_45=True)
         for n in range(1, MUZZLE_FLASH_FRAME_COUNT + 1)
     ]
 
