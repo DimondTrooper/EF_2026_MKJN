@@ -117,20 +117,67 @@ PLAYER_NUMBERS_BY_MODE = {
 }
 
 
+### Claude code für Absturz ohne Audiogeraet
+class SilentSound:
+    """
+    Macht: Ersatz fuer einen pygame-Sound, wenn der PC keine Tonausgabe hat.
+           Er hat dieselben Methoden, spielt aber nichts ab. play() gibt wie
+           pygame bei "kein Kanal frei" None zurueck -- damit kommt der Rest
+           des Spiels bereits zurecht.
+    """
+
+    def play(self, loops=0):
+        """
+        Macht: Tut nichts (kein Ton).
+        Input: loops (wird ignoriert)
+        Output: None
+        """
+        return None
+
+    def set_volume(self, volume):
+        """
+        Macht: Tut nichts (kein Ton).
+        Input: volume (wird ignoriert)
+        Output: kein Rueckgabewert
+        """
+
+
+def init_audio():
+    """
+    Macht: Startet die Tonausgabe. Hat der PC kein Audiogeraet (z.B. an
+           manchen Schul-PCs), wirft pygame einen Fehler; das Spiel laeuft
+           dann einfach ohne Ton weiter, statt abzustuerzen.
+    Input: keine
+    Output: True, wenn Ton verfuegbar ist, sonst False
+    """
+    try:
+        pygame.mixer.init()
+        pygame.mixer.set_num_channels(16)
+    except pygame.error:
+        return False
+    return True
+### Claude code für Absturz ohne Audiogeraet
+
+
 def load_sound(path, volume=None):
     """
     Macht: Laedt einen Sound und stellt optional seine Lautstaerke ein.
     Input: path (Dateipfad), volume (0.0 bis 1.0, optional)
-    Output: pygame.mixer.Sound
+    Output: pygame.mixer.Sound (oder SilentSound, wenn es keinen Ton gibt)
     """
+    ### Claude code für Absturz ohne Audiogeraet
+    if not AUDIO_AVAILABLE:
+        return SilentSound()
+    ### Claude code für Absturz ohne Audiogeraet
     sound = pygame.mixer.Sound(path)
     if volume is not None:
         sound.set_volume(volume)
     return sound
 
 
-pygame.mixer.init()
-pygame.mixer.set_num_channels(16)
+### Claude code für Absturz ohne Audiogeraet
+AUDIO_AVAILABLE = init_audio()
+### Claude code für Absturz ohne Audiogeraet
 SHOOT_SOUND = load_sound(SHOOT_SOUND_PATH)
 MOVE_SOUND = load_sound(MOVE_SOUND_PATH, MOVE_SOUND_VOLUME)
 IDLE_TANK_SOUND = load_sound(IDLE_TANK_SOUND_PATH, IDLE_TANK_SOUND_VOLUME)
@@ -500,7 +547,7 @@ def reload_ring_box(canvas, name_tag):
             center_x + RELOAD_RING_RADIUS, center_y + RELOAD_RING_RADIUS)
 
 
-#Claude code für bug mit Caps Lock
+### Claude code für bug mit Caps Lock
 def shoot_key_sequences(key):
     """
     Macht: Liefert die Tk-Tastenbindungen fuer eine Schusstaste. Bei Buchstaben
@@ -511,7 +558,7 @@ def shoot_key_sequences(key):
     """
     keys = [key, key.upper()] if len(key) == 1 and key.isalpha() else [key]
     return [f"<KeyPress-{k}>" for k in keys]
-#Claude code für bug mit Caps Lock
+### Claude code für bug mit Caps Lock
 
 
 def create_player(root, canvas, name, keys, tank_images, muzzle_flash_frames, start):
@@ -542,7 +589,6 @@ def create_player(root, canvas, name, keys, tank_images, muzzle_flash_frames, st
         "alive": True,
         "moving": False,
         "tank_images": tank_images,
-        "half_size": tank_images[0].width() // 2,
         "keys": keys,
         "muzzle_flash_frames": muzzle_flash_frames,
         "state": {
@@ -554,10 +600,10 @@ def create_player(root, canvas, name, keys, tank_images, muzzle_flash_frames, st
         "shoot_animation": None,
         "explosion": None,
     }
-    #Claude code für bug mit Caps Lock
+    ### Claude code für bug mit Caps Lock
     for sequence in shoot_key_sequences(keys["shoot"]):
         root.bind(sequence, lambda event: fire_bullet(canvas, player))
-    #Claude code für bug mit Caps Lock
+    ### Claude code für bug mit Caps Lock
     return player
 
 
@@ -913,6 +959,12 @@ def bind_key_tracking(root, keys_pressed):
     """
     root.bind("<KeyPress>", lambda event: keys_pressed.add(event.keysym.lower()))
     root.bind("<KeyRelease>", lambda event: keys_pressed.discard(event.keysym.lower()))
+    ### Claude code für klebende Tasten nach Alt+Tab
+    #Wechselt man das Fenster, kommt das Loslassen einer Taste nie beim Spiel
+    #an -- der Panzer wuerde ewig weiterfahren. Darum alles vergessen, sobald
+    #das Fenster den Fokus verliert.
+    root.bind("<FocusOut>", lambda event: keys_pressed.clear())
+    ### Claude code für klebende Tasten nach Alt+Tab
 
 
 def stop_match(match):
@@ -924,12 +976,15 @@ def stop_match(match):
     root = match["root"]
     stop_match_sounds(match["sounds"])
     for player_keys in PLAYER_KEYS.values():
-        #Claude code für bug mit Caps Lock
+        ### Claude code für bug mit Caps Lock
         for sequence in shoot_key_sequences(player_keys["shoot"]):
             root.unbind(sequence)
-        #Claude code für bug mit Caps Lock
+        ### Claude code für bug mit Caps Lock
     root.unbind("<KeyPress>")
     root.unbind("<KeyRelease>")
+    ### Claude code für klebende Tasten nach Alt+Tab
+    root.unbind("<FocusOut>")
+    ### Claude code für klebende Tasten nach Alt+Tab
 
 
 def return_to_menu():
@@ -982,10 +1037,10 @@ def end_match(match, alive_players):
     """
     stop_match(match)
     if alive_players:
-        winner_text = f"{alive_players[0]['name']} gewinnt!"
+        winner_text = f"{alive_players[0]['name']} wins!"
         record_win(alive_players[0]["name"])
     else:
-        winner_text = "Unentschieden!"
+        winner_text = "Draw!"
     match["root"].after(WIN_SCREEN_DELAY_MS, show_result_screen, match, winner_text)
 
 
@@ -1015,7 +1070,7 @@ def game_loop(match):
     match["root"].after(DELAY, game_loop, match)
 
 
-#Claude code für gleiche Namen
+### Claude code für gleiche Namen
 def make_unique_names(names):
     """
     Macht: Sorgt dafuer, dass kein Spielername doppelt vorkommt. Ein bereits
@@ -1036,7 +1091,7 @@ def make_unique_names(names):
         taken.add(candidate.lower())
         unique.append(candidate)
     return unique
-#Claude code für gleiche Namen
+### Claude code für gleiche Namen
 
 
 def run_game(root, mode, player_names=None):
@@ -1049,10 +1104,10 @@ def run_game(root, mode, player_names=None):
     """
     player_count = len(PLAYER_NUMBERS_BY_MODE[mode])
     if not player_names or len(player_names) < player_count:
-        player_names = [f"Spieler {n}" for n in range(1, player_count + 1)]
-    #Claude code für gleiche Namen
+        player_names = [f"Player {n}" for n in range(1, player_count + 1)]  # wie im Menue
+    ### Claude code für gleiche Namen
     player_names = make_unique_names(player_names)
-    #Claude code für gleiche Namen
+    ### Claude code für gleiche Namen
     register_players(player_names)
     for widget in root.winfo_children():
         widget.destroy()
