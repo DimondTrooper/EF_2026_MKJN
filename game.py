@@ -1015,6 +1015,30 @@ def game_loop(match):
     match["root"].after(DELAY, game_loop, match)
 
 
+#Claude code für gleiche Namen
+def make_unique_names(names):
+    """
+    Macht: Sorgt dafuer, dass kein Spielername doppelt vorkommt. Ein bereits
+           vergebener Name bekommt eine Nummer angehaengt ("Noah" -> "Noah 2").
+           Gross-/Kleinschreibung zaehlt nicht ("Noah" und "noah" sind gleich),
+           damit man die beiden auch im Scoreboard unterscheiden kann.
+    Input: names (Liste von Spielernamen)
+    Output: neue Liste mit eindeutigen Namen, gleiche Reihenfolge
+    """
+    unique = []
+    taken = set()
+    for name in names:
+        candidate = name
+        number = 2
+        while candidate.lower() in taken:
+            candidate = f"{name} {number}"
+            number += 1
+        taken.add(candidate.lower())
+        unique.append(candidate)
+    return unique
+#Claude code für gleiche Namen
+
+
 def run_game(root, mode, player_names=None):
     """
     Macht: Startet eine neue Partie: Spielfeld und Spieler aufbauen, Tasten
@@ -1026,6 +1050,9 @@ def run_game(root, mode, player_names=None):
     player_count = len(PLAYER_NUMBERS_BY_MODE[mode])
     if not player_names or len(player_names) < player_count:
         player_names = [f"Spieler {n}" for n in range(1, player_count + 1)]
+    #Claude code für gleiche Namen
+    player_names = make_unique_names(player_names)
+    #Claude code für gleiche Namen
     register_players(player_names)
     for widget in root.winfo_children():
         widget.destroy()
