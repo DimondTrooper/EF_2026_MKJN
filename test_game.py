@@ -1,10 +1,10 @@
+### Claude code für Unit-Tests (die ganze Datei ist von Claude)
 import tkinter as tk
 import unittest
 
 from game import ANGLE_STEPS, clamp
 from build_tank_images import get_tank_images
 
-### Claude code für Unit-Tests
 import math
 import os
 import sys
@@ -50,7 +50,6 @@ def tearDownModule():
     Output: kein Rueckgabewert
     """
     shared_root.destroy()
-### Claude code für Unit-Tests
 
 
 class TestClamp(unittest.TestCase):
@@ -94,7 +93,6 @@ class TestGetTankImages(unittest.TestCase):
             self.assertGreater(img.height(), 0, f"angle {angle}")
 
 
-### Claude code für Unit-Tests
 # ============================================================================
 # Hilfsfunktionen fuer die Tests
 # ============================================================================
@@ -621,7 +619,6 @@ class TestEndMatch(unittest.TestCase):
         show.assert_not_called()
 
 
-### Claude code für gleiche Namen
 class TestUniqueNames(unittest.TestCase):
     def test_different_names_unchanged(self):
         self.assertEqual(game.make_unique_names(["Noah", "Jun"]), ["Noah", "Jun"])
@@ -634,10 +631,8 @@ class TestUniqueNames(unittest.TestCase):
 
     def test_number_already_taken(self):
         self.assertEqual(game.make_unique_names(["Noah 2", "Noah", "Noah"]), ["Noah 2", "Noah", "Noah 3"])
-### Claude code für gleiche Namen
 
 
-### Claude code für bug mit Caps Lock
 class TestShootKeys(unittest.TestCase):
     def test_letter_binds_lower_and_upper(self):
         self.assertEqual(game.shoot_key_sequences("e"), ["<KeyPress-e>", "<KeyPress-E>"])
@@ -653,7 +648,6 @@ class TestShootKeys(unittest.TestCase):
         game.stop_match(match)
         self.assertEqual(shared_root.bind("<KeyPress-e>"), "")
         self.assertEqual(shared_root.bind("<KeyPress-E>"), "")
-### Claude code für bug mit Caps Lock
 
 
 class TestKeyTracking(unittest.TestCase):
@@ -670,7 +664,6 @@ class TestKeyTracking(unittest.TestCase):
         handlers["<KeyRelease>"](mock.Mock(keysym="W"))
         self.assertEqual(keys_pressed, {"up"})
 
-    ### Claude code für klebende Tasten nach Alt+Tab
     def test_focus_loss_releases_all_keys(self):
         keys_pressed = set()
         handlers = {}
@@ -686,10 +679,8 @@ class TestKeyTracking(unittest.TestCase):
         game.bind_key_tracking(shared_root, set())
         game.stop_match({"root": shared_root, "sounds": {"move": None, "idle": None, "ambient": []}})
         self.assertEqual(shared_root.bind("<FocusOut>"), "")
-    ### Claude code für klebende Tasten nach Alt+Tab
 
 
-### Claude code für Absturz ohne Audiogeraet
 class TestNoAudio(unittest.TestCase):
     def test_init_audio_fails_gracefully(self):
         with mock.patch.object(game.pygame.mixer, "init", side_effect=game.pygame.error("no audio device")):
@@ -718,7 +709,6 @@ class TestNoAudio(unittest.TestCase):
         with mock.patch.object(game, "SHOOT_SOUND", game.SilentSound()):
             game.fire_bullet(world["canvas"], player)
         self.assertEqual(len(player["projectiles"]), 1)
-### Claude code für Absturz ohne Audiogeraet
 
 
 # ============================================================================
@@ -814,10 +804,8 @@ class TestResourcePath(unittest.TestCase):
     def test_exe_uses_meipass(self):
         with mock.patch.object(sys, "_MEIPASS", "C:/temp_exe", create=True):
             self.assertEqual(utils.resource_path("Sounds/Shoot.wav"), os.path.join("C:/temp_exe", "Sounds/Shoot.wav"))
-### Claude code für Unit-Tests
 
 
-### Claude code für weichgezeichneten Hintergrund auf allen Seiten
 class TestBlurredBackground(unittest.TestCase):
     def test_size_matches_window(self):
         self.assertEqual(utils.blurred_city_image(320, 180).size, (320, 180))
@@ -847,8 +835,8 @@ class TestBlurredBackground(unittest.TestCase):
         self.assertEqual(canvas.type(canvas.find_all()[0]), "image")  # Hintergrund liegt ganz unten
         texts = [canvas.itemcget(i, "text") for i in canvas.find_all() if canvas.type(i) == "text"]
         self.assertIn("Noah wins!", texts)
-### Claude code für weichgezeichneten Hintergrund auf allen Seiten
 
 
 if __name__ == "__main__":
     unittest.main()
+### Claude code für Unit-Tests (die ganze Datei ist von Claude)
