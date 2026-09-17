@@ -1,7 +1,48 @@
+### Claude code für problem bei rückgehen von menu nach spiel
+#menu.py wird als Skript gestartet (python menu.py) und laeuft deshalb als
+#Modul "__main__". game.py macht aber in return_to_menu() ein "import menu".
+#Python findet dann KEIN Modul namens "menu", laedt diese Datei ein ZWEITES
+#Mal von der Festplatte und fuehrt dabei auch "root = Tk()" erneut aus --
+#es entsteht ein zweites Tk-Fenster mit eigenem, getrenntem Interpreter.
+#PhotoImage-Bilder gehoeren aber immer zu genau einem Interpreter. Die Bilder
+#landeten im ersten, die Widgets im zweiten -> "image pyimageX doesn't exist",
+#"invalid command name ...", "application has been destroyed".
+#Fix: dieses Modul zusaetzlich unter dem Namen "menu" registrieren, damit
+#"import menu" genau dieses Modul zurueckgibt statt es neu zu laden.
+import sys
+sys.modules.setdefault('menu', sys.modules[__name__])
+### Claude code für problem bei rückgehen von menu nach spiel
+
 from tkinter import *
 import game
 from tkinter import messagebox
 import os
+from PIL import Image, ImageTk, ImageFilter
+import ctypes
+from utils import resource_path
+
+### Claude code für weichgezeichneten City-Hintergrund im Menu
+CITY_BACKGROUND_PATH = resource_path('Assets/Map_City.png')
+CITY_BLUR_RADIUS = 9  #Staerke der Weichzeichnung
+CITY_DARKEN_AMOUNT = 0.35  #0 = Originalfarben, 1 = schwarz; dunkler = Text besser lesbar
+
+
+
+
+def load_blurred_city_background(width, height):
+    """
+    Macht: Laedt die City-Karte, skaliert sie auf die Fenstergroesse,
+           zeichnet sie weich und dunkelt sie leicht ab, damit Titel und
+           Buttons darueber gut lesbar bleiben.
+    Input: width, height (Zielgroesse in Pixeln)
+    Output: ImageTk.PhotoImage
+    """
+    img = Image.open(CITY_BACKGROUND_PATH).convert('RGB')
+    img = img.resize((max(1, width), max(1, height)))
+    img = img.filter(ImageFilter.GaussianBlur(CITY_BLUR_RADIUS))
+    img = Image.blend(img, Image.new('RGB', img.size, (0, 0, 0)), CITY_DARKEN_AMOUNT)
+    return ImageTk.PhotoImage(img)
+### Claude code für weichgezeichneten City-Hintergrund im Menu
 
 def mode_menu():
     #clear old widgets->feels like switching
@@ -10,31 +51,41 @@ def mode_menu():
 
     frame=Frame(root, bd=0)
     frame.place(relx=0, rely=0, relwidth=1.0, relheight=1.0)
+
+    ### Claude code für weichgezeichneten City-Hintergrund im Menu
+    #update_idletasks() ist noetig, weil root.winfo_width()/height() direkt
+    #nach dem Setzen von -fullscreen sonst noch die alte, kleine Fenstergroesse
+    #liefert und der Hintergrund dann falsch skaliert waere.
+    root.update_idletasks()
+    width = root.winfo_width()
+    height = root.winfo_height()
+
+    #Hintergrund + Titel + Deko-Panzer liegen auf einem Canvas: dort sind
+    #Text und transparente PNG-Bereiche wirklich transparent, waehrend ein
+    #Label immer einen grauen Kasten mitbringen wuerde.
+    global menu_background_img
+    bg_canvas = Canvas(frame, width=width, height=height, highlightthickness=0, bd=0, bg='#3f5c3f')
+    bg_canvas.place(x=0, y=0, relwidth=1, relheight=1)
+    menu_background_img = load_blurred_city_background(width, height)
+    bg_canvas.create_image(0, 0, anchor='nw', image=menu_background_img)
+
     #title,desc
-    label_title=Label(frame, text='TNK-XTREME', fg='dark blue', font=('Calibri', 28, 'bold'))
-    label_title.place(relx=0.2, rely=0.15, relwidth=0.6, relheight=0.15)
-    label_desc=Label(frame, text='Choose battle mode to play:', font=('Calibri', 14))
-    label_desc.place(relx=0.1, rely=0.35, relwidth=0.8, relheight=0.1)
+    bg_canvas.create_text(width * 0.5, height * 0.225, text='TNK-XTREME',
+                          fill='white', font=('Calibri', 28, 'bold'))
+    bg_canvas.create_text(width * 0.5, height * 0.4, text='Choose battle mode to play:',
+                          fill='white', font=('Calibri', 14))
 
     #-DECORATIVE SIDE TANKS-
     global tank_left_img, tank_right_img
-    try:
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        
-        green_path = os.path.join(script_dir, 'Assets', 'Tank_Green_Homescreen.png')
-        blue_path = os.path.join(script_dir, 'Assets', 'Tank_Blue_Homescreen.png')
-        
-        raw_img_green = PhotoImage(file=green_path)
-        raw_img_blue = PhotoImage(file=blue_path)
-        
-        tank_left_img = raw_img_green.subsample(2, 2)
-        tank_right_img = raw_img_blue.subsample(2, 2)
-        
-        Label(frame, image=tank_left_img).place(relx=0.15, rely=0.57, anchor='center')
-        Label(frame, image=tank_right_img).place(relx=0.85, rely=0.57, anchor='center')
-    except Exception as e:
-        print(f"Image load note: {e}")
-    #decor side tanks - imported from ai entirely!
+    green_path = resource_path('Assets/Tank_Green_Homescreen.png')
+    blue_path = resource_path('Assets/Tank_Blue_Homescreen.png')
+
+    tank_left_img = PhotoImage(file=green_path).subsample(2, 2)
+    tank_right_img = PhotoImage(file=blue_path).subsample(2, 2)
+
+    bg_canvas.create_image(width * 0.15, height * 0.57, image=tank_left_img)
+    bg_canvas.create_image(width * 0.85, height * 0.57, image=tank_right_img)
+    ### Claude code für weichgezeichneten City-Hintergrund im Menu
  
     #button for mode1(string->controls screen)
     btn_1=Button(frame, text='1 VS 1 Mode', bg='lightgreen', command=lambda: controls_screen('1 vs 1'))
@@ -48,10 +99,10 @@ def controls_screen(mode):
     #d previous frame
     for widget in root.winfo_children():
         widget.destroy()
- 
+
     frame=Frame(root, bd=0)
     frame.place(relx=0, rely=0, relwidth=1.0, relheight=1.0)
- 
+
     #check selected mode(->change text header)
     if mode == '1 vs 1':
         text_mode='1 vs 1 Controls'
@@ -65,19 +116,18 @@ def controls_screen(mode):
 
     #load player tank images
     global tank_p1_img, tank_p2_img, tank_p3_img
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    tank_p1_img = PhotoImage(file=os.path.join(script_dir, 'Assets', 'Tank_Blue_Right.png')).subsample(4, 4)
-    tank_p2_img = PhotoImage(file=os.path.join(script_dir, 'Assets', 'Red_Tank_Right.png')).subsample(4, 4)
-    tank_p3_img = PhotoImage(file=os.path.join(script_dir, 'Assets', 'Tank_Green_Right.png')).subsample(4, 4)
- 
+    tank_p1_img = PhotoImage(file=resource_path('Assets/Tank_Blue_Right.png')).subsample(4, 4)
+    tank_p2_img = PhotoImage(file=resource_path('Assets/Red_Tank_Right.png')).subsample(4, 4)
+    tank_p3_img = PhotoImage(file=resource_path('Assets/Tank_Green_Right.png')).subsample(4, 4)
+
     #helpfunct->create player boxes(controls explain)
     def player_box(x_pos, title_text, controls_text):
         box=Frame(frame, bd=2, relief=GROOVE)
         box.place(relx=x_pos, rely=0.18, relwidth=0.23, relheight=0.45)
- 
+
         lbl_title=Label(box, text=title_text, font=('Calibri', 14, 'bold'))
         lbl_title.pack(pady=10)
- 
+
         lbl_body=Label(box, text=controls_text, font=('Calibri', 11), justify=LEFT)
         lbl_body.pack(padx=10, anchor='w')
 
@@ -169,6 +219,9 @@ root.attributes('-fullscreen', True)
 root.bind('<Escape>', lambda e: root.attributes('-fullscreen', False))
 root.option_add('*Font', 'Calibri 12')
 root.option_add('*Background','#f0f0f0')
+myappid = 'Tray_Icon'
+ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+root.iconbitmap(resource_path('Assets/Logo/App-Logo.ico'))
 # start app on menufunct
 mode_menu()
 root.mainloop()
