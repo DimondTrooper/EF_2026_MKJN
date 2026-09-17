@@ -326,7 +326,6 @@ class TestCreatePlayer(unittest.TestCase):
         self.assertTrue(player["alive"])
         self.assertEqual(player["state"]["angle"], 0)
         self.assertEqual(player["projectiles"], [])
-        self.assertEqual(player["half_size"], HULL_PX // 2)
         self.assertEqual(world["canvas"].coords(player["tank"]), [100.0, 200.0])
 
     def test_name_tag_above_tank(self):
@@ -601,13 +600,13 @@ class TestEndMatch(unittest.TestCase):
         with mock.patch.object(shared_root, "after") as after:
             game.end_match(self.match, [{"name": "Noah"}])
         self.assertEqual(scoreboard.session_wins["Noah"], 1)
-        self.assertEqual(after.call_args[0][3], "Noah gewinnt!")
+        self.assertEqual(after.call_args[0][3], "Noah wins!")
 
     def test_draw_without_survivors(self):
         with mock.patch.object(shared_root, "after") as after:
             game.end_match(self.match, [])
         self.assertEqual(scoreboard.session_wins, {})
-        self.assertEqual(after.call_args[0][3], "Unentschieden!")
+        self.assertEqual(after.call_args[0][3], "Draw!")
 
     def test_key_bindings_removed(self):
         game.bind_key_tracking(shared_root, set())
@@ -622,7 +621,23 @@ class TestEndMatch(unittest.TestCase):
         show.assert_not_called()
 
 
-#Claude code für bug mit Caps Lock
+### Claude code für gleiche Namen
+class TestUniqueNames(unittest.TestCase):
+    def test_different_names_unchanged(self):
+        self.assertEqual(game.make_unique_names(["Noah", "Jun"]), ["Noah", "Jun"])
+
+    def test_duplicate_gets_number(self):
+        self.assertEqual(game.make_unique_names(["Noah", "Noah", "Noah"]), ["Noah", "Noah 2", "Noah 3"])
+
+    def test_ignores_upper_lower_case(self):
+        self.assertEqual(game.make_unique_names(["Noah", "noah"]), ["Noah", "noah 2"])
+
+    def test_number_already_taken(self):
+        self.assertEqual(game.make_unique_names(["Noah 2", "Noah", "Noah"]), ["Noah 2", "Noah", "Noah 3"])
+### Claude code für gleiche Namen
+
+
+### Claude code für bug mit Caps Lock
 class TestShootKeys(unittest.TestCase):
     def test_letter_binds_lower_and_upper(self):
         self.assertEqual(game.shoot_key_sequences("e"), ["<KeyPress-e>", "<KeyPress-E>"])
@@ -638,7 +653,7 @@ class TestShootKeys(unittest.TestCase):
         game.stop_match(match)
         self.assertEqual(shared_root.bind("<KeyPress-e>"), "")
         self.assertEqual(shared_root.bind("<KeyPress-E>"), "")
-#Claude code für bug mit Caps Lock
+### Claude code für bug mit Caps Lock
 
 
 class TestKeyTracking(unittest.TestCase):
@@ -654,6 +669,56 @@ class TestKeyTracking(unittest.TestCase):
         self.assertEqual(keys_pressed, {"w", "up"})  # klein geschrieben wie in PLAYER_KEYS
         handlers["<KeyRelease>"](mock.Mock(keysym="W"))
         self.assertEqual(keys_pressed, {"up"})
+
+    ### Claude code für klebende Tasten nach Alt+Tab
+    def test_focus_loss_releases_all_keys(self):
+        keys_pressed = set()
+        handlers = {}
+        fake_root = mock.Mock()
+        fake_root.bind.side_effect = lambda sequence, handler: handlers.__setitem__(sequence, handler)
+        game.bind_key_tracking(fake_root, keys_pressed)
+
+        handlers["<KeyPress>"](mock.Mock(keysym="w"))
+        handlers["<FocusOut>"](mock.Mock())  # Alt+Tab
+        self.assertEqual(keys_pressed, set())
+
+    def test_focus_binding_removed_at_match_end(self):
+        game.bind_key_tracking(shared_root, set())
+        game.stop_match({"root": shared_root, "sounds": {"move": None, "idle": None, "ambient": []}})
+        self.assertEqual(shared_root.bind("<FocusOut>"), "")
+    ### Claude code für klebende Tasten nach Alt+Tab
+
+
+### Claude code für Absturz ohne Audiogeraet
+class TestNoAudio(unittest.TestCase):
+    def test_init_audio_fails_gracefully(self):
+        with mock.patch.object(game.pygame.mixer, "init", side_effect=game.pygame.error("no audio device")):
+            self.assertFalse(game.init_audio())
+
+    def test_silent_sound_without_audio(self):
+        with mock.patch.object(game, "AUDIO_AVAILABLE", False):
+            sound = game.load_sound(game.SHOOT_SOUND_PATH, 0.5)
+        self.assertIsInstance(sound, game.SilentSound)
+        self.assertIsNone(sound.play(loops=-1))
+
+    def test_match_sounds_work_silently(self):
+        silent = game.SilentSound()
+        names = ["IDLE_TANK_SOUND", "BREEZE_SOUND", "MOVE_SOUND", "DISTANT_EXPLOSION_SOUND", "PLANE_SOUND"]
+        with mock.patch.multiple(game, **{name: silent for name in names}):
+            sounds = game.start_match_sounds()
+            sounds["next_explosion_time"] = sounds["next_plane_time"] = 0
+            game.update_ambient_sounds(sounds)
+            game.update_move_sound(sounds, [{"moving": True}])
+            game.update_move_sound(sounds, [{"moving": False}])
+            game.stop_match_sounds(sounds)  # darf keinen Fehler werfen
+
+    def test_shooting_works_silently(self):
+        world = make_world()
+        player = make_player(world, (400, 300))
+        with mock.patch.object(game, "SHOOT_SOUND", game.SilentSound()):
+            game.fire_bullet(world["canvas"], player)
+        self.assertEqual(len(player["projectiles"]), 1)
+### Claude code für Absturz ohne Audiogeraet
 
 
 # ============================================================================

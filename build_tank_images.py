@@ -349,13 +349,3 @@ def get_muzzle_flash_frames(color="blue"):
         for straight, diagonal in zip(straight_bases, diagonal_bases)
     ]
     return {angle: [frame[angle] for frame in frames] for angle in frames[0]}
-
-
-if __name__ == "__main__":
-    import tkinter as tk
-
-    root = tk.Tk()
-    images = get_tank_images()
-    for angle in sorted(images):
-        print(angle, "Grad ->", images[angle].width(), "x", images[angle].height())
-    root.destroy()
