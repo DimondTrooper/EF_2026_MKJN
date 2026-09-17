@@ -1,6 +1,6 @@
 from tkinter import *
 import game
-import gc
+from tkinter import messagebox
 import os
 
 def mode_menu():
@@ -104,7 +104,7 @@ def controls_screen(mode):
         "Move Backward                             Arrow Down\n\n"
         "Turn Right                                        Arrow Right\n"
         "Turn Left                                           Arrow Left\n"
-        "Shoot                                                 Left Ctrl")
+        "Shoot                                                 Right Ctrl")
     #mode1->display 2 boxes; mode2->all bxs
     if mode=='1 vs 1':
         player_box(0.21, 'Controls Player 1', p1_text)
