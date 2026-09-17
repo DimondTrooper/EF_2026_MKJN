@@ -694,9 +694,14 @@ def move_tank(world, player, forward, backward, other_players):
     vx, vy = ANGLE_TO_VECTOR[player["state"]["angle"]]
     direction = 1 if forward else -1
     x, y = canvas.coords(player["tank"])
-    half = player["half_size"]
-    new_x = clamp(x + vx * SPEED * direction, half, world["width"] - half)
-    new_y = clamp(y + vy * SPEED * direction, half, world["height"] - half)
+    ### Claude code für unsichtbare Wand am Spielfeldrand
+    #Der Rand wird mit der Hitbox (Rumpf) begrenzt, nicht mit der halben
+    #Bildgroesse -- das Bild hat wegen Rohr/Drehung viel leeren Rand, der
+    #Panzer blieb dadurch sichtbar vor dem Spielfeldrand stehen.
+    edge = TANK_HITBOX_RADIUS
+    new_x = clamp(x + vx * SPEED * direction, edge, world["width"] - edge)
+    new_y = clamp(y + vy * SPEED * direction, edge, world["height"] - edge)
+    ### Claude code für unsichtbare Wand am Spielfeldrand
 
     blockers = world["trees"] + world["wrecks"] + [tank_circle(canvas, other) for other in other_players if other["alive"]]
     if first_circle_hit(new_x, new_y, TANK_HITBOX_RADIUS, blockers) is not None:
