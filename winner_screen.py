@@ -1,5 +1,9 @@
 from tkinter import Button, Canvas
 
+### Claude code für weichgezeichneten Hintergrund auf allen Seiten
+from utils import add_blurred_background
+### Claude code für weichgezeichneten Hintergrund auf allen Seiten
+
 
 def show_winner_screen(root, winner_text, leaderboard, replay_command, return_to_menu_command):
     """
@@ -15,6 +19,9 @@ def show_winner_screen(root, winner_text, leaderboard, replay_command, return_to
     height = root.winfo_height()
     end_canvas = Canvas(root, width=width, height=height, bg="#202020", highlightthickness=0)
     end_canvas.pack(fill="both", expand=True)
+    ### Claude code für weichgezeichneten Hintergrund auf allen Seiten
+    add_blurred_background(end_canvas, width, height)
+    ### Claude code für weichgezeichneten Hintergrund auf allen Seiten
     end_canvas.create_text(
         width // 2,
         height * 0.20,

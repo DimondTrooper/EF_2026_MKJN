@@ -817,5 +817,38 @@ class TestResourcePath(unittest.TestCase):
 ### Claude code für Unit-Tests
 
 
+### Claude code für weichgezeichneten Hintergrund auf allen Seiten
+class TestBlurredBackground(unittest.TestCase):
+    def test_size_matches_window(self):
+        self.assertEqual(utils.blurred_city_image(320, 180).size, (320, 180))
+
+    def test_darker_than_original(self):
+        blurred = utils.blurred_city_image(160, 90)
+        original = Image.open(utils.CITY_BACKGROUND_PATH).convert("L").resize((160, 90))
+        mean = lambda img: sum(img.convert("L").getdata()) / (img.width * img.height)
+        self.assertLess(mean(blurred), mean(original))
+
+    def test_result_is_cached(self):
+        self.assertIs(utils.blurred_city_image(200, 100), utils.blurred_city_image(200, 100))
+
+    def test_background_is_lowest_canvas_item(self):
+        canvas = tk.Canvas(shared_root)
+        utils.add_blurred_background(canvas, 200, 100)
+        first = canvas.find_all()[0]
+        self.assertEqual(canvas.type(first), "image")
+        self.assertEqual(canvas.itemcget(first, "image"), str(canvas.background_img))
+
+    def test_winner_screen_has_background(self):
+        from winner_screen import show_winner_screen
+        with mock.patch.object(shared_root, "winfo_width", return_value=400), \
+                mock.patch.object(shared_root, "winfo_height", return_value=300):
+            show_winner_screen(shared_root, "Noah wins!", [("Noah", 1)], lambda: None, lambda: None)
+        canvas = [w for w in shared_root.winfo_children() if isinstance(w, tk.Canvas)][-1]
+        self.assertEqual(canvas.type(canvas.find_all()[0]), "image")  # Hintergrund liegt ganz unten
+        texts = [canvas.itemcget(i, "text") for i in canvas.find_all() if canvas.type(i) == "text"]
+        self.assertIn("Noah wins!", texts)
+### Claude code für weichgezeichneten Hintergrund auf allen Seiten
+
+
 if __name__ == "__main__":
     unittest.main()

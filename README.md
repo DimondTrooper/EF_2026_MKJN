@@ -97,7 +97,7 @@ Für die Tests öffnet sich kurz ein unsichtbares Tk-Fenster.
 | `build_tank_images.py` | Erzeugt aus den Panzerbildern alle 8 Blickrichtungen, die Schuss-Animation und die Wracks |
 | `scoreboard.py` | Zählt die Siege, solange das Spiel läuft |
 | `winner_screen.py` | Endbildschirm mit Gewinner und Scoreboard |
-| `utils.py` | `resource_path()`: findet Assets als Skript und in der exe |
+| `utils.py` | `resource_path()`: findet Assets als Skript und in der exe; weichgezeichneter City-Hintergrund für Menü und Endbildschirm |
 | `test_game.py` | Unit-Tests |
 | `Assets/` | Grafiken (Karte, Panzer, Bäume, Minen, Explosionen, Logo) |
 | `Sounds/` | Soundeffekte und Hintergrundgeräusche |

@@ -5,29 +5,32 @@ sys.modules.setdefault('menu', sys.modules[__name__])
 
 from tkinter import *
 import game
-from PIL import Image, ImageTk, ImageFilter
 import ctypes
 from utils import resource_path
+### Claude code für weichgezeichneten Hintergrund auf allen Seiten
+from utils import add_blurred_background
 
-### Claude code für weichgezeichneten City-Hintergrund im Menu
-CITY_BACKGROUND_PATH = resource_path('Assets/Map_City.png')
-CITY_BLUR_RADIUS = 9  #Staerke der Weichzeichnung
-CITY_DARKEN_AMOUNT = 0.35  #0 = Originalfarben, 1 = schwarz; dunkler = Text besser lesbar
+TITLE_FONT = ('Calibri', 20, 'bold')
 
-def load_blurred_city_background(width, height):
+
+def create_background_canvas(frame):
     """
-    Macht: Laedt die City-Karte, skaliert sie auf die Fenstergroesse,
-           zeichnet sie weich und dunkelt sie leicht ab, damit Titel und
-           Buttons darueber gut lesbar bleiben.
-    Input: width, height (Zielgroesse in Pixeln)
-    Output: ImageTk.PhotoImage
+    Macht: Legt einen Canvas mit dem weichgezeichneten City-Hintergrund
+           ueber die ganze Seite. Alles, was danach im Frame platziert wird,
+           liegt darueber.
+    Input: frame (Frame) - Das Frame der aktuellen Seite
+    Output: (Canvas, Breite, Hoehe)
     """
-    img = Image.open(CITY_BACKGROUND_PATH).convert('RGB')
-    img = img.resize((max(1, width), max(1, height)))
-    img = img.filter(ImageFilter.GaussianBlur(CITY_BLUR_RADIUS))
-    img = Image.blend(img, Image.new('RGB', img.size, (0, 0, 0)), CITY_DARKEN_AMOUNT)
-    return ImageTk.PhotoImage(img)
-### Claude code für weichgezeichneten City-Hintergrund im Menu
+    #update_idletasks() ist noetig, weil root.winfo_width()/height() direkt
+    #nach dem Setzen von -fullscreen sonst noch die alte Fenstergroesse liefert
+    root.update_idletasks()
+    width = root.winfo_width()
+    height = root.winfo_height()
+    bg_canvas = Canvas(frame, width=width, height=height, highlightthickness=0, bd=0, bg='#3f5c3f')
+    bg_canvas.place(x=0, y=0, relwidth=1, relheight=1)
+    add_blurred_background(bg_canvas, width, height)
+    return bg_canvas, width, height
+### Claude code für weichgezeichneten Hintergrund auf allen Seiten
 
 def mode_menu():
     """
@@ -44,14 +47,7 @@ def mode_menu():
     frame.place(relx=0, rely=0, relwidth=1.0, relheight=1.0)
 
     ### Claude code für weichgezeichneten City-Hintergrund im Menu
-    root.update_idletasks()
-    width = root.winfo_width()
-    height = root.winfo_height()
-    global menu_background_img
-    bg_canvas = Canvas(frame, width=width, height=height, highlightthickness=0, bd=0, bg='#3f5c3f')
-    bg_canvas.place(x=0, y=0, relwidth=1, relheight=1)
-    menu_background_img = load_blurred_city_background(width, height)
-    bg_canvas.create_image(0, 0, anchor='nw', image=menu_background_img)
+    bg_canvas, width, height = create_background_canvas(frame)
 
     #title,desc
     bg_canvas.create_text(width * 0.5, height * 0.225, text='TNK-XTREME',
@@ -112,14 +108,19 @@ def controls_screen(mode):
 
     frame=Frame(root, bd=0)
     frame.place(relx=0, rely=0, relwidth=1.0, relheight=1.0)
+    ### Claude code für weichgezeichneten Hintergrund auf allen Seiten
+    bg_canvas, width, height = create_background_canvas(frame)
+    ### Claude code für weichgezeichneten Hintergrund auf allen Seiten
 
     #check selected mode(->change text header)
     if mode == '1 vs 1':
         text_mode='1 vs 1 Controls'
     else:
         text_mode='1 vs 1 vs 1 Controls'
-    label=Label(frame, text=text_mode, fg='brown', font=('Calibri', 20, 'bold'))
-    label.place(relx=0.2, rely=0.05, relwidth=0.6, relheight=0.1)
+    ### Claude code für weichgezeichneten Hintergrund auf allen Seiten
+    #Titel direkt auf den Hintergrund schreiben (ein Label haette einen grauen Kasten)
+    bg_canvas.create_text(width * 0.5, height * 0.1, text=text_mode, fill='white', font=TITLE_FONT)
+    ### Claude code für weichgezeichneten Hintergrund auf allen Seiten
     #go-back-to-menu btn
     btn_back=Button(frame, text='← Return', bg='lightgray', command=mode_menu)
     btn_back.place(relx=0.005, rely=0.01, relwidth=0.1, relheight=0.1)
@@ -211,8 +212,10 @@ def name_input_screen(mode):
         widget.destroy()
     frame=Frame(root, bd=0)
     frame.place(relx=0, rely=0, relwidth=1.0, relheight=1.0)
-    label=Label(frame, text='Enter Player Names', fg='brown', font=('Calibri', 20, 'bold'))
-    label.place(relx=0.2, rely=0.05, relwidth=0.6, relheight=0.1)
+    ### Claude code für weichgezeichneten Hintergrund auf allen Seiten
+    bg_canvas, width, height = create_background_canvas(frame)
+    bg_canvas.create_text(width * 0.5, height * 0.1, text='Enter Player Names', fill='white', font=TITLE_FONT)
+    ### Claude code für weichgezeichneten Hintergrund auf allen Seiten
     
     # Return button goes back to controls screen
     btn_back = Button(frame, text='← Return', bg='lightgray', command=lambda: controls_screen(mode))
