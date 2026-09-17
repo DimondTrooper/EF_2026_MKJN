@@ -11,6 +11,39 @@ from utils import resource_path
 from utils import add_blurred_background
 
 TITLE_FONT = ('Calibri', 20, 'bold')
+### Claude code für weichgezeichneten Hintergrund auf allen Seiten
+
+### Claude code für neue Homescreen-Panzer
+from PIL import Image, ImageTk
+
+#Beide Panzer sind im gleichen Massstab gezeichnet (gleich lange Ketten); das
+#blaue Bild ist nur wegen Rohr und Muendungsfeuer groesser. Darum werden beide
+#mit DEMSELBEN Faktor skaliert -- so sind die Panzer selbst gleich gross.
+HOMESCREEN_TANK_MAX_WIDTH = 0.36  #das breiteste Bild wird hoechstens so breit (Anteil der Fensterbreite)
+HOMESCREEN_TANK_MAX_HEIGHT = 0.31  #das hoechste Bild wird hoechstens so hoch (Anteil der Fensterhoehe)
+HOMESCREEN_TANK_MARGIN = 0.02  #Abstand zum linken bzw. rechten Fensterrand (Anteil der Breite)
+HOMESCREEN_GROUND_Y = 0.68  #Hoehe, auf der beide Panzer "stehen" (Anteil der Fensterhoehe)
+
+
+def load_images_same_scale(paths, max_width, max_height):
+    """
+    Macht: Laedt mehrere Bilder und skaliert alle weich mit demselben Faktor,
+           sodass das breiteste hoechstens max_width und das hoechste
+           hoechstens max_height misst. Die Groessenverhaeltnisse zwischen
+           den Bildern bleiben dadurch erhalten.
+    Input: paths (Liste von Dateipfaden), max_width, max_height (in Pixeln)
+    Output: Liste von ImageTk.PhotoImage (gleiche Reihenfolge wie paths)
+    """
+    images = [Image.open(path).convert('RGBA') for path in paths]
+    scale = min(max_width / max(img.width for img in images),
+                max_height / max(img.height for img in images))
+    return [
+        ImageTk.PhotoImage(img.resize((max(1, round(img.width * scale)), max(1, round(img.height * scale))), Image.LANCZOS))
+        for img in images
+    ]
+### Claude code für neue Homescreen-Panzer
+
+### Claude code für weichgezeichneten Hintergrund auf allen Seiten
 
 
 def create_background_canvas(frame):
@@ -56,15 +89,18 @@ def mode_menu():
                           fill='white', font=('Calibri', 14))
 
     #-DECORATIVE SIDE TANKS-
+    ### Claude code für neue Homescreen-Panzer
+    #blau links schiesst nach rechts, rot rechts schaut nach links -> sie stehen sich gegenueber
     global tank_left_img, tank_right_img
-    green_path = resource_path('Assets/Tank_Green_Homescreen.png')
-    blue_path = resource_path('Assets/Tank_Blue_Homescreen.png')
-
-    tank_left_img = PhotoImage(file=green_path).subsample(2, 2)
-    tank_right_img = PhotoImage(file=blue_path).subsample(2, 2)
-
-    bg_canvas.create_image(width * 0.15, height * 0.57, image=tank_left_img)
-    bg_canvas.create_image(width * 0.85, height * 0.57, image=tank_right_img)
+    tank_left_img, tank_right_img = load_images_same_scale(
+        [resource_path('Assets/Tank_Blue_Homescreen.png'), resource_path('Assets/Tank_Red_Homescreen.png')],
+        width * HOMESCREEN_TANK_MAX_WIDTH, height * HOMESCREEN_TANK_MAX_HEIGHT,
+    )
+    #an den unteren Ecken ausrichten: beide Ketten stehen auf derselben Linie
+    ground_y = height * HOMESCREEN_GROUND_Y
+    bg_canvas.create_image(width * HOMESCREEN_TANK_MARGIN, ground_y, image=tank_left_img, anchor='sw')
+    bg_canvas.create_image(width * (1 - HOMESCREEN_TANK_MARGIN), ground_y, image=tank_right_img, anchor='se')
+    ### Claude code für neue Homescreen-Panzer
     ### Claude code für weichgezeichneten City-Hintergrund im Menu
  
     #button for mode1(string->controls screen)
