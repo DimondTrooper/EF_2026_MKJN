@@ -3,13 +3,15 @@ import os
 
 from PIL import Image, ImageTk
 
+from utils import resource_path
+
 TANK_BASE_PATHS = {
-    "blue": ("Assets/Tank_Blue_Straight.png", "Assets/Tank_Blue_Diagonal.png"),
-    "red": ("Assets/Tank_Red_Straight.png", "Assets/Tank_Red_Diagonal.png"),
-    "green": ("Assets/Tank_Green_Straight.png", "Assets/Tank_Green_Diagonal.png"),
+    "blue": (resource_path("Assets/Tank_Blue_Straight.png"), resource_path("Assets/Tank_Blue_Diagonal.png")),
+    "red": (resource_path("Assets/Tank_Red_Straight.png"), resource_path("Assets/Tank_Red_Diagonal.png")),
+    "green": (resource_path("Assets/Tank_Green_Straight.png"), resource_path("Assets/Tank_Green_Diagonal.png")),
 }
 
-MUZZLE_FLASH_DIR = "Assets/Tank_Shoot_animation"
+MUZZLE_FLASH_DIR = resource_path("Assets/Tank_Shoot_animation")
 MUZZLE_FLASH_FRAME_COUNT = 3
 
 HULL_PX = 44
@@ -182,7 +184,7 @@ def get_tank_images(color="blue"):
     return _build_angle_set(base_straight, base_diagonal)
 
 
-DESTROYED_DIR = "Assets/Tank_Destroyed_animation"
+DESTROYED_DIR = resource_path("Assets/Tank_Destroyed_animation")
 DESTROYED_FRAME_COUNT = 4
 
 #Fuer das brennende Wrack gibt es zu jedem der 8 Blickwinkel eine eigene

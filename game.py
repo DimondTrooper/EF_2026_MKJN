@@ -9,19 +9,20 @@ from PIL import Image, ImageTk
 from build_tank_images import HULL_PX, get_destroyed_tank_frames, get_muzzle_flash_frames, get_tank_images
 from scoreboard import get_leaderboard, record_win, register_players
 from winner_screen import show_winner_screen
+from utils import resource_path
 import random
 
-BACKGROUND_PATH = "Assets/Map_Hintergrund.png"
-SHOOT_SOUND_PATH = "Sounds/Shoot.wav"
-MOVE_SOUND_PATH = "Sounds/Tank_moving.wav"
+BACKGROUND_PATH = resource_path("Assets/Map_Hintergrund.png")
+SHOOT_SOUND_PATH = resource_path("Sounds/Shoot.wav")
+MOVE_SOUND_PATH = resource_path("Sounds/Tank_moving.wav")
 MOVE_SOUND_FADEOUT_MS = 300
 MOVE_SOUND_VOLUME = 0.25
-IDLE_TANK_SOUND_PATH = "Sounds/idle_Tank.wav"
+IDLE_TANK_SOUND_PATH = resource_path("Sounds/idle_Tank.wav")
 IDLE_TANK_SOUND_VOLUME = 0.18
 AMBIENT_SOUND_PATHS = [
-    "Sounds/Ambient_Sounds/breeze-tree.wav",
-    "Sounds/Ambient_Sounds/distant-explosions.wav",
-    "Sounds/Ambient_Sounds/propeller-planewav.wav",
+    resource_path("Sounds/Ambient_Sounds/breeze-tree.wav"),
+    resource_path("Sounds/Ambient_Sounds/distant-explosions.wav"),
+    resource_path("Sounds/Ambient_Sounds/propeller-planewav.wav"),
 ]
 AMBIENT_SOUND_VOLUME = 0.12
 BREEZE_SOUND_VOLUME = 0.28
@@ -31,8 +32,8 @@ PLANE_MIN_DELAY = 35
 PLANE_MAX_DELAY = 60
 AMBIENT_SOUND_FADEOUT_MS = 800
 
-TREE_IMAGE_PATHS = ["Assets/Tree_1.png", "Assets/Tree_2.png"]
-TREE_TRUNK_PATH = "Assets/Tree_Trunk.png"
+TREE_IMAGE_PATHS = [resource_path("Assets/Tree_1.png"), resource_path("Assets/Tree_2.png")]
+TREE_TRUNK_PATH = resource_path("Assets/Tree_Trunk.png")
 TREE_SCALE = 0.8
 TREE_TRUNK_SIZE_RATIO = 0.5
 TREE_HITBOX_SCALE = 0.85
@@ -48,13 +49,13 @@ OBSTACLE_MAX_COUNT = 15
 TANK_HITBOX_SCALE = 1.15
 TANK_HITBOX_RADIUS = HULL_PX / 2 * TANK_HITBOX_SCALE
 
-MINE_IMAGE_PATH = "Assets/Mine.png"
+MINE_IMAGE_PATH = resource_path("Assets/Mine.png")
 MINE_COUNT = 6
 MINE_DISPLAY_SIZE = 30
 MINE_HITBOX_SCALE = 0.8
 
 SHOOT_ANIMATION_FRAME_MS = 60
-EXPLOSION_FRAME_DIR = "Assets/Tank_Explosion_Defeat"
+EXPLOSION_FRAME_DIR = resource_path("Assets/Tank_Explosion_Defeat")
 EXPLOSION_FRAME_COUNT = 4
 EXPLOSION_FRAME_MS = 80
 EXPLOSION_DISPLAY_SIZE = 110

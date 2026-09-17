@@ -18,11 +18,15 @@ import game
 from tkinter import messagebox
 import os
 from PIL import Image, ImageTk, ImageFilter
+import ctypes
+from utils import resource_path
 
 ### Claude code für weichgezeichneten City-Hintergrund im Menu
-CITY_BACKGROUND_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'Assets', 'Map_City.png')
+CITY_BACKGROUND_PATH = resource_path('Assets/Map_City.png')
 CITY_BLUR_RADIUS = 9  #Staerke der Weichzeichnung
 CITY_DARKEN_AMOUNT = 0.35  #0 = Originalfarben, 1 = schwarz; dunkler = Text besser lesbar
+
+
 
 
 def load_blurred_city_background(width, height):
@@ -73,9 +77,8 @@ def mode_menu():
 
     #-DECORATIVE SIDE TANKS-
     global tank_left_img, tank_right_img
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    green_path = os.path.join(script_dir, 'Assets', 'Tank_Green_Homescreen.png')
-    blue_path = os.path.join(script_dir, 'Assets', 'Tank_Blue_Homescreen.png')
+    green_path = resource_path('Assets/Tank_Green_Homescreen.png')
+    blue_path = resource_path('Assets/Tank_Blue_Homescreen.png')
 
     tank_left_img = PhotoImage(file=green_path).subsample(2, 2)
     tank_right_img = PhotoImage(file=blue_path).subsample(2, 2)
@@ -113,10 +116,9 @@ def controls_screen(mode):
 
     #load player tank images
     global tank_p1_img, tank_p2_img, tank_p3_img
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    tank_p1_img = PhotoImage(file=os.path.join(script_dir, 'Assets', 'Tank_Blue_Right.png')).subsample(4, 4)
-    tank_p2_img = PhotoImage(file=os.path.join(script_dir, 'Assets', 'Red_Tank_Right.png')).subsample(4, 4)
-    tank_p3_img = PhotoImage(file=os.path.join(script_dir, 'Assets', 'Tank_Green_Right.png')).subsample(4, 4)
+    tank_p1_img = PhotoImage(file=resource_path('Assets/Tank_Blue_Right.png')).subsample(4, 4)
+    tank_p2_img = PhotoImage(file=resource_path('Assets/Red_Tank_Right.png')).subsample(4, 4)
+    tank_p3_img = PhotoImage(file=resource_path('Assets/Tank_Green_Right.png')).subsample(4, 4)
 
     #helpfunct->create player boxes(controls explain)
     def player_box(x_pos, title_text, controls_text):
@@ -217,6 +219,9 @@ root.attributes('-fullscreen', True)
 root.bind('<Escape>', lambda e: root.attributes('-fullscreen', False))
 root.option_add('*Font', 'Calibri 12')
 root.option_add('*Background','#f0f0f0')
+myappid = 'Tray_Icon'
+ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+root.iconbitmap(resource_path('Assets/Logo/App-Logo.ico'))
 # start app on menufunct
 mode_menu()
 root.mainloop()
